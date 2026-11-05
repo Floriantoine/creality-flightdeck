@@ -1,0 +1,63 @@
+K1 ALERTES — installation sur cPanel
+====================================
+
+Ce que ça fait
+--------------
+Le tableau de bord de ta K1 Max envoie ses alertes à TON serveur, qui les relaie :
+  • notification push sur ton Android (par Chrome, sans app à installer)
+  • courriels (envoyés par ton serveur)
+  • SMS (par la passerelle courriel → SMS de ton opérateur)
+
+Il faut : PHP 7.4 ou plus récent (avec openssl et curl, présents sur presque tous les cPanel) et HTTPS (AutoSSL).
+
+
+1) Téléverser les fichiers
+--------------------------
+cPanel > Gestionnaire de fichiers > public_html
+  → crée un dossier k1-alertes et téléverse-y le contenu du dossier server/ de ce repo
+Tu dois avoir : public_html/k1-alertes/index.html, send.php, config.example.php, data/ …
+
+Adresse du service : https://TON-DOMAINE/k1-alertes
+
+
+2) Configurer (config.php)
+--------------------------
+Copie config.example.php en config.php, puis clic droit > « Modifier » :
+  • token  : remplace __CHANGE_MOI__ par une longue chaîne aléatoire (au moins 12 caractères). Garde-la secret.
+  • from   : une adresse de ton domaine (crée-la dans cPanel > Comptes de messagerie),
+             ex. alertes@ton-domaine.com. Sinon, les courriels tombent dans les spams.
+  • emails : tes adresses qui reçoivent les alertes, ex. ['toi@gmail.com']
+  • sms    : ex. ['4185551234@texto.videotron.ca'] (adresse selon ton opérateur)
+
+
+3) Activer les notifications sur ton Android
+--------------------------------------------
+  1. Ouvre https://TON-DOMAINE/k1-alertes dans Chrome sur ton téléphone
+  2. Colle le jeton → « Activer les notifications » → Autoriser
+  3. Menu ⋮ de Chrome → « Ajouter à l'écran d'accueil » (facultatif, mais pratique)
+  4. « Envoyer un test » → la notification doit arriver
+
+
+4) Brancher le tableau de bord
+------------------------------
+Dans k1_dashboard.html, carte Sécurité > « Alertes sur ton téléphone » :
+  • Mon serveur : https://TON-DOMAINE/k1-alertes
+  • Jeton       : le même que dans config.php
+  → « Envoyer une alerte test »
+
+
+Pour que les alertes sonnent fort sur Android
+---------------------------------------------
+Paramètres Android > Applications > Chrome > Notifications : autorise le son,
+et l'affichage par-dessus « Ne pas déranger » si tu veux être réveillé.
+Désactive aussi l'optimisation de la batterie pour Chrome si les alertes arrivent en retard.
+
+
+Fichiers
+--------
+  index.html, sw.js, manifest.json, icônes  → la page « app » du téléphone
+  send.php       → reçoit une alerte et la distribue
+  subscribe.php  → enregistre ton téléphone
+  latest.php     → historique des alertes
+  lib.php        → fonctions communes
+  data/          → clés et abonnements (bloqué depuis le web, créé automatiquement)

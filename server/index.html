@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1013">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>K1 Alertes</title>
+<style>
+  :root{--bg:#0e1013;--panel:#16191e;--panel2:#1c2027;--line:#262b33;--text:#e6e8eb;--muted:#8a919c;--accent:#ff7a1a;--ok:#3ecf8e;--err:#ff5c5c}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,"Segoe UI",Roboto,sans-serif;padding:16px;padding-top:max(16px,env(safe-area-inset-top))}
+  h1{font-size:20px;margin:4px 0 16px;display:flex;align-items:center;gap:10px}
+  h1 i{width:12px;height:12px;background:var(--accent);border-radius:3px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+  .card h2{margin:0 0 10px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--text);padding:10px 12px;border-radius:8px;font:14px ui-monospace,Consolas,monospace}
+  input:focus{outline:none;border-color:var(--accent)}
+  button{width:100%;padding:12px;border-radius:9px;border:1px solid var(--line);background:var(--panel2);color:var(--text);font:600 15px system-ui,sans-serif;margin-top:10px}
+  button.main{background:var(--accent);border-color:var(--accent);color:#1a0d00}
+  button:disabled{opacity:.5}
+  .st{margin-top:10px;font-size:13px;color:var(--muted);min-height:1.2em}
+  .st.ok{color:var(--ok)} .st.err{color:var(--err)}
+  .msg{padding:10px 0;border-bottom:1px solid #ffffff0a}
+  .msg:last-child{border:0}
+  .msg b{display:block;font-size:14px}
+  .msg.high b{color:#ffb3b3}
+  .msg.test b{color:var(--muted)}
+  .msg p{margin:2px 0 0;font-size:13px;color:var(--text)}
+  .msg time{font-size:11px;color:var(--muted)}
+  .msg img{display:block;width:100%;margin-top:8px;border-radius:8px;border:1px solid var(--line)}
+  .empty{color:var(--muted);font-size:13px}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px}
+  .row{display:flex;gap:8px}.row button{flex:1}
+</style>
+</head>
+<body>
+<h1><i></i>K1 Alertes</h1>
+
+<section class="card">
+  <h2>Ce téléphone</h2>
+  <label class="hint" for="tok">Jeton (dans config.php)</label>
+  <input id="tok" placeholder="colle ton jeton ici" autocomplete="off" spellcheck="false">
+  <button class="main" id="on">Activer les notifications</button>
+  <div class="row"><button id="test">Envoyer un test</button><button id="off">Désactiver</button></div>
+  <div class="st" id="st"></div>
+  <div class="hint" id="installHint">Astuce : menu ⋮ de Chrome → « Ajouter à l'écran d'accueil » pour en faire une app.</div>
+</section>
+
+<section class="card">
+  <h2>Dernières alertes</h2>
+  <div id="list"><div class="empty">—</div></div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const st = (t, c="") => { $("st").textContent = t; $("st").className = "st " + c; };
+const tok = () => $("tok").value.trim();
+try { $("tok").value = localStorage.getItem("k1tok") || ""; } catch(e){}
+$("tok").addEventListener("change", () => { try { localStorage.setItem("k1tok", tok()); } catch(e){} loadList(); });
+
+const b64ToBytes = s => { s = s.replace(/-/g,"+").replace(/_/g,"/"); s += "===".slice((s.length+3)%4); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+async function api(file, body){
+  const r = await fetch(file, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({token: tok(), ...body}), cache:"no-store"});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("Erreur " + r.status));
+  return j;
+}
+
+async function enable(){
+  if (!tok()) return st("Entre d'abord ton jeton", "err");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return st("Ce navigateur ne supporte pas les notifications push (utilise Chrome)", "err");
+  try {
+    st("Autorisation…");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") return st("Notifications refusées. Réactive-les dans les paramètres du site.", "err");
+    const reg = await navigator.serviceWorker.register("sw.js");
+    await navigator.serviceWorker.ready;
+    const { publicKey } = await (await fetch("subscribe.php", {cache:"no-store"})).json();
+    let sub = await reg.pushManager.getSubscription();
+    if (sub){
+      const cur = sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+      const want = b64ToBytes(publicKey);
+      if (!cur || cur.length !== want.length || cur.some((b,i) => b !== want[i])) { await sub.unsubscribe(); sub = null; }
+    }
+    sub = sub || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(publicKey) });
+    const name = /Android/.test(navigator.userAgent) ? "Android" : "Navigateur";
+    const j = await api("subscribe.php", { subscription: sub.toJSON(), name });
+    st(`Activé ✓ — ${j.devices} appareil(s) abonné(s)`, "ok");
+    try { localStorage.setItem("k1tok", tok()); } catch(e){}
+    loadList();
+  } catch(e){ st(e.message, "err"); }
+}
+
+async function disable(){
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub){ await api("subscribe.php", { subscription: sub.toJSON(), remove: true }).catch(()=>{}); await sub.unsubscribe(); }
+    st("Notifications désactivées sur ce téléphone");
+  } catch(e){ st(e.message, "err"); }
+}
+
+async function test(){
+  try {
+    st("Envoi…");
+    const j = await api("send.php", { title: "K1 Max - test", body: "Test depuis le téléphone. Si tu vois cette notification, tout marche.", priority: "normal", test: true });
+    const pu = j.results.push, good = pu.filter(x => x.code >= 200 && x.code < 300).length;
+    const p = pu.length ? `${good}/${pu.length} appareil(s) ✓` + (good < pu.length ? ` — échec : code ${[...new Set(pu.filter(x => !(x.code >= 200 && x.code < 300)).map(x => x.code))].join(", ")}` : "") : "aucun appareil abonné";
+    st(`Envoyé — push : ${p}`, pu.length && good === pu.length ? "ok" : "err");
+    setTimeout(loadList, 500);
+  } catch(e){ st(e.message, "err"); }
+}
+
+async function loadList(){
+  if (!tok()) return;
+  try {
+    const j = await api("latest.php", { n: 20 });
+    $("list").innerHTML = j.messages.length ? j.messages.map(m => `
+      <div class="msg ${m.priority}${m.test ? " test" : ""}"><time>${new Date(m.time*1000).toLocaleString("fr-CA")}</time>
+      <b></b><p></p>${m.image ? `<a href="${m.image}" target="_blank"><img src="${m.image}" alt="capture" loading="lazy"></a>` : ""}</div>`).join("") : `<div class="empty">Aucune alerte pour l'instant</div>`;
+    [...$("list").querySelectorAll(".msg")].forEach((el, i) => { el.querySelector("b").textContent = j.messages[i].title; el.querySelector("p").textContent = j.messages[i].body; });
+  } catch(e){ $("list").innerHTML = `<div class="empty"></div>`; $("list").firstChild.textContent = e.message; }
+}
+
+$("on").onclick = enable; $("off").onclick = disable; $("test").onclick = test;
+if (window.matchMedia("(display-mode: standalone)").matches) $("installHint").style.display = "none";
+(async () => {
+  if ("serviceWorker" in navigator){
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    if (sub && Notification.permission === "granted") st("Ce téléphone reçoit les notifications ✓", "ok");
+  }
+  loadList();
+})();
+</script>
+</body>
+</html>

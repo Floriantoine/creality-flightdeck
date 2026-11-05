@@ -1,0 +1,7 @@
+Options -Indexes
+# Le service worker et le manifeste ne doivent pas être mis en cache trop longtemps
+<IfModule mod_headers.c>
+    <FilesMatch "^(sw\.js|manifest\.json)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+</IfModule>

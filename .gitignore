@@ -1,0 +1,15 @@
+# Alert server: real secrets and runtime data stay local
+server/config.php
+server/data/*.json
+server/captures/*.jpg
+server/captures/*.png
+
+# Output of the read-only exploration tools
+tools/explore/
+explore/
+
+# Misc
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db

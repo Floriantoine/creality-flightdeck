@@ -1,0 +1,2494 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K1 Max</title>
+<style>
+  :root{
+    --bg:#0e1013; --panel:#16191e; --panel2:#1c2027; --line:#262b33;
+    --text:#e6e8eb; --muted:#8a919c; --accent:#ff7a1a; --ok:#3ecf8e; --warn:#f5b942; --err:#ff5c5c;
+    --nozzle:#ff7a1a; --bed:#4aa8ff; --box:#a78bfa;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+  header{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  h1{font-size:16px;margin:0;letter-spacing:.02em}
+  h1 span{color:var(--accent)}
+  #model{color:var(--muted);font-size:12px;font-family:var(--mono)}
+  .conn{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+  input{background:var(--panel);border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:6px;font-family:var(--mono);font-size:13px}
+  input:focus{outline:none;border-color:var(--accent)}
+  .conn input{width:140px}
+  button{background:var(--panel2);border:1px solid var(--line);color:var(--text);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.5;cursor:default;border-color:var(--line)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--err);box-shadow:0 0 0 3px #ff5c5c22;flex:none}
+  .dot.on{background:var(--ok);box-shadow:0 0 0 3px #3ecf8e22}
+  .dot.busy{background:var(--warn);box-shadow:0 0 0 3px #f5b94222;animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  #connTxt{color:var(--muted);font-size:12px;min-width:120px}
+
+  .full{grid-column:1/-1}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h2{margin:0 0 12px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .status{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .badge{font-size:12px;padding:3px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line)}
+  .badge.printing{color:var(--ok);border-color:#3ecf8e55}
+  .badge.paused{color:var(--warn);border-color:#f5b94255}
+  .badge.error{color:var(--err);border-color:#ff5c5c55}
+  .file{font-family:var(--mono);font-size:13px;color:var(--muted);word-break:break-all;margin-bottom:16px}
+  .pct{font-size:56px;font-weight:300;line-height:1;font-variant-numeric:tabular-nums}
+  .pct small{font-size:22px;color:var(--muted)}
+  .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:14px 0 18px}
+  .bar > div{height:100%;width:0;background:linear-gradient(90deg,#ff7a1a,#ffb366);transition:width .6s}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stat,.temp{background:var(--panel2);border-radius:8px;padding:10px 12px}
+  .stat .k,.temp .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .stat .v{font-size:20px;font-variant-numeric:tabular-nums;margin-top:2px}
+  .temps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+  .temp{border-left:3px solid var(--c)}
+  .temp .v{font-size:24px;font-variant-numeric:tabular-nums}
+  .temp .t{font-size:12px;color:var(--muted)}
+  canvas{width:100%;height:170px;display:block}
+  .cam{aspect-ratio:4/3;background:#000;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+  .cam img{width:100%;height:100%;object-fit:contain}
+  .col{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:6px}
+  .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+
+  /* ---- Toutes les données ---- */
+  .dhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .dhead h2{margin:0}
+  .dhead .count{color:var(--muted);font-size:12px}
+  .dhead .tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .dhead input{width:220px}
+  .chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;cursor:pointer;user-select:none}
+  .chk input{width:auto;accent-color:var(--accent)}
+  .cats{columns:340px;column-gap:12px}
+  .cat{background:var(--panel2);border-radius:8px;overflow:hidden;break-inside:avoid;margin-bottom:12px}
+  .cat > h3{margin:0;padding:9px 12px;font-size:12px;font-weight:600;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
+  .cat > h3 .n{margin-left:auto;color:var(--muted);font-weight:400;font-family:var(--mono)}
+  .cat > h3 i{width:8px;height:8px;border-radius:2px;background:var(--c)}
+  .row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:10px;padding:6px 12px;border-bottom:1px solid #ffffff08;align-items:start}
+  .row:last-child{border-bottom:0}
+  .row .lbl{font-size:13px}
+  .row .key{font-family:var(--mono);font-size:11px;color:var(--muted);word-break:break-all}
+  .row .val{font-family:var(--mono);font-size:13px;text-align:right;word-break:break-word;font-variant-numeric:tabular-nums}
+  .row .val .raw{display:block;font-size:11px;color:var(--muted)}
+  .row.flash{animation:flash 1.2s ease-out}
+  @keyframes flash{0%{background:#ff7a1a33}100%{background:transparent}}
+  .pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line)}
+  .pill.yes{color:var(--ok);border-color:#3ecf8e55}
+  .pill.no{color:var(--muted)}
+  .empty{color:var(--muted)}
+  .meta{color:var(--muted);font-size:11px;font-weight:400}
+  .nest{grid-column:1/-1;margin-top:2px}
+  .obj,.arr{border-left:2px solid var(--line);padding-left:10px;margin:2px 0 2px 2px}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:3px 0;font-size:12px;border-bottom:1px dashed #ffffff0a}
+  .kv:last-child{border-bottom:0}
+  .kv .k{color:var(--muted)}
+  .kv .v{font-family:var(--mono);text-align:right;word-break:break-word}
+  .kv .v .raw{display:inline;margin-left:6px}
+  .blk > summary{cursor:pointer;font-size:12px;padding:4px 0;list-style:none;display:flex;align-items:center;gap:4px}
+  .blk > summary::-webkit-details-marker{display:none}
+  .blk > summary::before{content:"▸";color:var(--muted);width:12px;transition:transform .15s}
+  .blk[open] > summary::before{transform:rotate(90deg)}
+  .blk > summary .meta{margin-left:auto}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;padding:3px 0}
+  .chip{font-family:var(--mono);font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .chip .raw{display:none}
+  .sm{font-size:12px}
+  .slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .slot{display:flex;gap:9px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+  .slot .sw{width:30px;height:30px;border-radius:7px;flex:none;border:1px solid #ffffff2a;box-shadow:inset 0 -6px 10px #0003}
+  .slot .si{display:flex;flex-direction:column;min-width:0;flex:1;font-size:12px;line-height:1.3}
+  .slot .si span{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sbar{height:3px;background:var(--panel2);border-radius:9px;margin-top:4px;overflow:hidden}
+  .sbar div{height:100%;background:var(--ok)}
+  .plate{display:flex;flex-direction:column;gap:10px;padding:6px 0}
+  .plate svg{width:100%;max-width:340px;margin:0 auto;aspect-ratio:1;display:block}
+  .plate .bed{fill:#0b0d10;stroke:var(--line)}
+  .plate .grid line{stroke:#ffffff10;stroke-width:.6}
+  .plate .pn{fill:#fff;font:600 11px "Segoe UI",sans-serif;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#000a;stroke-width:3px}
+  .plate g.ex polygon{fill:none;stroke-dasharray:4 3;opacity:.5}
+  .plate g.cur polygon{stroke-width:2.5;fill-opacity:1}
+  .pl-list{display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:0}
+  .pl-item{display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:5px}
+  .pl-item i{width:9px;height:9px;border-radius:2px;flex:none}
+  .pl-item b{font-family:var(--mono);color:var(--muted);font-weight:400;width:16px;text-align:right}
+  .pl-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+  .pl-item em{margin-left:auto;font-style:normal;font-size:10px;color:var(--accent)}
+  .pl-item.cur{background:#ff7a1a1a}
+  .pl-item.ex span{text-decoration:line-through;color:var(--muted)}
+
+  /* ---- Carte Plateau ---- */
+  .phead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .phead h2{margin:0}
+  .ptools{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .ptools button{padding:4px 10px;font-size:12px}
+  .ptools button.on{border-color:var(--accent);color:var(--accent)}
+  .pwrap{position:relative;border-radius:8px;overflow:hidden;background:#08090b;border:1px solid var(--line)}
+  #plateSvg{width:100%;aspect-ratio:1;display:block;cursor:grab;touch-action:none;user-select:none}
+  #plateSvg.drag{cursor:grabbing}
+  #pBed{fill:#101318;stroke:#3a414c;stroke-width:1.5;vector-effect:non-scaling-stroke}
+  #pGrid line{stroke:#ffffff0d;vector-effect:non-scaling-stroke;stroke-width:1}
+  #pGrid line.mj{stroke:#ffffff1f}
+  #pLabels text{fill:#8a919c;font-family:ui-monospace,Consolas,monospace}
+  #pLabels .corner{fill:none;stroke:#f5b942;stroke-width:3;vector-effect:non-scaling-stroke}
+  #pLabels .cornerdot{fill:#f5b942}
+  #pLabels text.cornertxt{fill:#f5b942;font-weight:600}
+  #pLabels text.fronttxt{fill:#f5b942;font-weight:600;letter-spacing:.1em}
+  #pObjs polygon{stroke-width:1.5;vector-effect:non-scaling-stroke;transition:fill-opacity .15s}
+  #pObjs g.hl polygon{stroke-width:3;fill-opacity:.55}
+  #pObjs g.cur polygon{stroke-width:2.5}
+  #pObjs g.ex polygon{fill:none;stroke-dasharray:5 4;opacity:.5}
+  #pObjs text{fill:#fff;font-weight:600;font-family:"Segoe UI",sans-serif;text-anchor:middle;dominant-baseline:central;paint-order:stroke;stroke:#000b;pointer-events:none}
+  #pObjs .dim{fill:#cfd5dd;font-weight:400;font-family:ui-monospace,Consolas,monospace}
+  #pTrailP{stroke:#ff7a1a;stroke-opacity:.9;stroke-width:5;vector-effect:non-scaling-stroke;stroke-linecap:round}
+  #pTrailT{stroke:#4aa8ff;stroke-opacity:.8;stroke-width:4;vector-effect:non-scaling-stroke;stroke-linecap:round}
+  #pTrailL{stroke:#ffffff;stroke-opacity:.12;stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:2 3}
+  .gbar{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+  .gbar button{font-size:12px;padding:4px 10px}
+  .gstat{font-size:11px;color:var(--muted);flex:1;min-width:0}
+  .gstat.warn{color:var(--warn)}
+  .glayer{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .glayer button{padding:3px 8px;font-size:11px}
+  .glayer input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);padding:0;border:0;background:none}
+  .gltxt{font-family:var(--mono);font-size:11px;color:var(--text);min-width:130px}
+  .glayer select{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 6px;font-size:12px}
+  .pwrap.drop{outline:2px dashed var(--accent);outline-offset:-6px}
+  body.hasG #pObjs polygon{fill-opacity:.06;stroke-dasharray:3 4;stroke-width:1}
+  body.hasG #pObjs g.hl polygon{fill-opacity:.15}
+  #pGcode path{fill:none;vector-effect:non-scaling-stroke;stroke-linejoin:round;stroke-linecap:round}
+  #pGhost path{fill:none;stroke:#ffffff;stroke-opacity:.08;vector-effect:non-scaling-stroke;stroke-width:1}
+  .tleg{display:flex;gap:14px;font-size:11px;color:var(--muted);margin-top:8px;flex-wrap:wrap;align-items:center}
+  .tleg i{display:inline-block;width:9px;height:9px;border-radius:50%;background:#ff7a1a;vertical-align:middle;margin-right:5px}
+  .tleg i.t{background:#4aa8ff}
+  .tleg i.done{width:16px;height:0;border-radius:0;background:none;border-top:2px solid #e6e8eb}
+  .tleg i.todo{width:16px;height:0;border-radius:0;background:none;border-top:2px solid #e6e8eb33}
+  .tleg .chk{margin-left:auto}
+  #pNoz circle{fill:#ff7a1a;stroke:#fff;stroke-width:1.5;vector-effect:non-scaling-stroke}
+  #pNoz line{stroke:#ff7a1a;stroke-width:1;vector-effect:non-scaling-stroke;stroke-dasharray:3 3;opacity:.6}
+  .ptip{position:absolute;pointer-events:none;background:#000d;border:1px solid var(--line);border-radius:6px;padding:6px 9px;font-size:12px;line-height:1.4;display:none;white-space:nowrap;z-index:2}
+  .ptip b{display:block}
+  .ptip span{color:var(--muted);font-family:var(--mono);font-size:11px}
+  .pinfo{position:absolute;left:8px;bottom:8px;font-family:var(--mono);font-size:11px;color:var(--muted);background:#000a;padding:3px 7px;border-radius:5px;pointer-events:none}
+  .pinfo b{color:var(--accent);font-weight:400}
+  .pempty{position:absolute;left:0;right:0;top:10px;display:flex;justify-content:center;color:var(--muted);pointer-events:none;font-size:12px}
+  #plateCard .pl-list{margin-top:10px}
+  #plateCard .pl-item{cursor:pointer}
+  #plateCard .pl-item:hover,#plateCard .pl-item.hl{background:#ffffff0a}
+  .pl-item .dimtxt{font-family:var(--mono);font-size:11px;color:var(--muted);flex:none}
+  .phint{margin-top:8px;font-size:11px;color:var(--muted)}
+
+  /* ---- Sécurité ---- */
+  .sw-arm{margin-left:auto;color:var(--text)!important}
+  .sstat{padding:9px 12px;border-radius:8px;background:var(--panel2);font-size:13px;margin-bottom:12px;border-left:3px solid var(--muted)}
+  .sstat.ok{border-left-color:var(--ok)}
+  .sstat.warn{border-left-color:var(--warn);color:var(--warn)}
+  .sstat.alarm{border-left-color:var(--err);background:#ff5c5c1f;color:#ffb3b3;font-weight:600}
+  .sstat.off{border-left-color:var(--muted);color:var(--muted)}
+  .sgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .sgrid label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .sgrid span{display:flex;align-items:center;gap:5px;color:var(--text);text-transform:none;font-size:12px}
+  .sgrid input{width:100%;min-width:0}
+  .sacts{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+  .sacts .chk{color:var(--text)}
+  .sbtns{display:flex;gap:8px;flex-wrap:wrap}
+  #sAck{border-color:var(--err);color:#ffb3b3}
+  .slog{margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--muted);max-height:120px;overflow:auto}
+  .slog div{padding:2px 0;border-bottom:1px solid #ffffff08}
+  .slog .bad{color:#ffb3b3}
+  .remote{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .remote h3{margin:0 0 8px;font-size:12px;font-weight:600}
+  .rgrid{display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:10px}
+  .rgrid label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted)}
+  .rstat{font-size:12px;color:var(--muted);align-self:center}
+  .hint2{font-size:11px;color:var(--muted);margin:2px 0 6px}
+  .prow{display:flex;gap:14px;align-items:center}
+  .thumb{width:84px;height:84px;object-fit:contain;background:#08090b;border:1px solid var(--line);border-radius:8px;flex:none}
+  /* ---- Contrôle ---- */
+  .cgrp{padding:10px 0;border-top:1px solid var(--line)}
+  .cgrp:first-of-type{border-top:0;padding-top:0}
+  .ck{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+  .crow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .crow + .crow{margin-top:8px}
+  .crow button{padding:7px 12px}
+  button.danger{border-color:#ff5c5c66;color:#ffb3b3}
+  button.danger:hover{border-color:var(--err)}
+  .presets button{font-size:12px;padding:4px 10px}
+  .tin{display:flex;align-items:center;gap:6px;font-size:13px}
+  .tin input{width:76px}
+  .sl{display:grid;grid-template-columns:80px 1fr 52px;gap:10px;align-items:center;font-size:13px;margin:4px 0}
+  .sl input{accent-color:var(--accent);padding:0;border:0;background:none}
+  .sl b{font-family:var(--mono);font-weight:400;text-align:right;font-size:12px}
+  .zrow button{font-family:var(--mono);font-size:12px;padding:5px 9px}
+  .sw{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-left:auto}
+  .sw input{display:none}
+  .sw span{width:34px;height:19px;border-radius:99px;background:var(--panel2);border:1px solid var(--line);position:relative;transition:.15s}
+  .sw span::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;background:var(--muted);transition:.15s}
+  .sw input:checked + span{background:#ff7a1a44;border-color:var(--accent)}
+  .sw input:checked + span::after{left:17px;background:var(--accent)}
+  .cerr{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:#ff5c5c1f;color:#ffb3b3;margin-bottom:10px;font-size:13px}
+  .cerr button{margin-left:auto}
+  .clog{font-family:var(--mono);font-size:11px;color:var(--muted);max-height:72px;overflow:auto;margin-top:6px}
+  .pl-item .exb{flex:none;font-size:10px;padding:1px 7px;border-color:#ff5c5c55;color:#ffb3b3}
+  #askBox{position:fixed;inset:0;z-index:60;background:#000a;display:flex;align-items:center;justify-content:center;padding:16px}
+  #askBox.hide{display:none}
+  .askin{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;max-width:420px;width:100%;box-shadow:0 20px 60px #000a}
+  .askin h3{margin:0 0 8px;font-size:16px}
+  .askin p{margin:0 0 16px;color:var(--muted);font-size:13px;white-space:pre-line}
+  .askb{display:flex;gap:8px;justify-content:flex-end}
+  #askYes{background:var(--accent);border-color:var(--accent);color:#1a0d00;font-weight:600}
+  #askBox.danger #askYes{background:#c62828;border-color:#c62828;color:#fff}
+  /* ---- Bed mesh ---- */
+  .mstat{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .mstat.ok{color:var(--ok)} .mstat.warn{color:var(--warn)}
+  .mviews > div{max-width:520px;margin:0 auto}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{border:0;border-radius:0;padding:4px 12px;font-size:12px}
+  .seg button.on{background:var(--accent);color:#1a0d00;font-weight:600}
+  #m3d,#mHeat{width:100%;aspect-ratio:1;display:block;background:#08090b;border:1px solid var(--line);border-radius:8px}
+  #m3d{cursor:grab;touch-action:none}
+  .mhint{font-size:11px;color:var(--muted);margin-top:4px}
+  .mstats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+  .mstats .stat .v{font-size:16px}
+  .mverdict{grid-column:1/-1;font-size:12px;padding:6px 10px;border-radius:6px;background:var(--panel2)}
+  .mpaste{margin-top:10px}
+  .mpaste summary{cursor:pointer;font-size:12px;color:var(--muted)}
+  .mpaste textarea{width:100%;min-height:120px;margin-top:8px;background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:8px;font:12px var(--mono)}
+  .mpaste button{margin-top:6px}
+
+  /* ---- Panneau Paramètres ---- */
+  #drawer{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);background:var(--panel);border-left:1px solid var(--line);z-index:40;transform:translateX(100%);transition:transform .22s ease;display:flex;flex-direction:column;box-shadow:-12px 0 40px #0008}
+  body.drawer #drawer{transform:none}
+  #backdrop{position:fixed;inset:0;background:#0007;z-index:39;opacity:0;pointer-events:none;transition:opacity .2s}
+  body.drawer #backdrop{opacity:1;pointer-events:auto}
+  .drhead{display:flex;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .drhead h2{margin:0;font-size:14px}
+  .drhead button{margin-left:auto;padding:4px 10px}
+  #drBody{overflow:auto;padding:14px 16px 30px;flex:1}
+  #drBody #safeCard{border:0;padding:0;background:none}
+  #drBody .phead > h2{cursor:default}
+  #drBody .phead > h2::before{content:none}
+  .safepill{font-size:12px;padding:5px 10px;border-radius:99px}
+  .safepill.ok{border-color:#3ecf8e66;color:var(--ok)}
+  .safepill.warn{border-color:#f5b94299;color:var(--warn)}
+  .safepill.alarm{border-color:var(--err);color:#fff;background:#c62828}
+  .safepill.off{color:var(--muted)}
+
+
+  /* ================= Mise en page « Fusion A + C » ================= */
+  .app{display:flex;min-height:100vh}
+  .side{position:sticky;top:0;height:100vh;width:232px;flex:none;background:#121519;border-right:1px solid var(--line);padding:18px 12px;box-sizing:border-box;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+  .brand{display:flex;align-items:center;gap:9px;padding:4px 10px 16px;font-size:16px}
+  .brand .logo{width:12px;height:12px;border-radius:3px;background:var(--accent)}
+  .brand #model{margin-left:auto;font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px}
+  .nav{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;border:0;background:transparent;color:#C4C9D0;font-size:14px;text-align:left;width:100%}
+  .nav svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;flex:none}
+  .nav:hover{background:#ffffff08;border:0}
+  .nav.on{background:#ff7a1a1f;color:#FFB47A;font-weight:500}
+  .side .grow{flex:1;min-height:12px}
+  .side .safepill{width:100%;text-align:left;border-radius:8px;padding:9px 12px;margin-bottom:4px}
+  .connbox{border-top:1px solid var(--line);margin-top:8px;padding:12px 4px 0;display:flex;flex-direction:column;gap:8px}
+  .connst{display:flex;align-items:center;gap:8px;font-size:12px}
+  .connbox input{width:100%;box-sizing:border-box}
+  .connbtns{display:flex;gap:6px}.connbtns button{flex:1;padding:6px 8px;font-size:12px}
+  .content{flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh}
+  header.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 28px;border-bottom:0}
+  header.top .thumb{width:52px;height:52px}
+  .tinfo{min-width:0}
+  .tinfo .file{margin:0;font-size:17px;font-weight:600;color:var(--text);font-family:inherit}
+  .tsub{font-size:13px;color:var(--muted);margin-top:3px}
+  .tsub .badge{padding:1px 8px}
+  .tprog{flex:1;min-width:200px;display:flex;align-items:center;gap:12px}
+  .tprog .bar{flex:1;margin:0}
+  .tprog .pct{font-size:24px}.tprog .pct small{font-size:13px}
+  .ttimes{font-size:13px;color:var(--muted)}
+  .ttimes b{font-family:var(--mono);font-weight:400;color:#C4C9D0}
+  .view{display:none;padding:0 28px 24px;flex:1}
+  .view.on{display:block}
+  .view > .card + .card{margin-top:16px}
+  .bento{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+  .content a{color:var(--accent);text-decoration:none}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;min-width:0;min-height:170px;box-sizing:border-box}
+  .t-cam,.t-plate{grid-column:span 2;grid-row:span 2}
+  .t-cam{padding:0;overflow:hidden;background:#08090b}
+  .t-cam .cam{aspect-ratio:auto;height:100%;min-height:340px;border-radius:0}
+  .t-band{grid-column:span 4;flex-direction:row;align-items:center;gap:22px;flex-wrap:wrap;min-height:0;padding:14px 16px}
+  .t-band{grid-row:auto}
+  .th{display:flex;align-items:center;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .tile.go{cursor:pointer;transition:border-color .15s,background .15s}
+  .tile.go:hover{border-color:#ff7a1a88;background:#1a1d23}
+  .th a{margin-left:auto;font-size:15px;text-decoration:none;color:var(--accent);padding:0 4px}
+  .tv{font-family:var(--mono);font-size:32px;margin-top:8px}
+  .tt{font-size:12px;color:var(--muted);margin-top:auto}
+  .t-temp{border-bottom:3px solid var(--c)}
+  .mmini{display:grid;gap:3px;margin:10px 0 8px}
+  .mmini div{height:20px;border-radius:3px;font:10px/20px var(--mono);text-align:center;overflow:hidden;cursor:default}
+  .mmini div:hover{outline:2px solid #fff;outline-offset:-1px}
+  .live{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 10px;margin-top:12px}
+  .live span{display:block;font-size:11px;color:var(--muted)}
+  .live b{font-family:var(--mono);font-weight:400;font-size:19px}
+  .t-cfs{grid-column:span 4;min-height:0}
+  @media (max-width:1150px){.t-cfs{grid-column:span 2}}
+  @media (max-width:760px){.t-cfs{grid-column:auto}}
+  .cfsrow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px}
+  .cfsrow .cs{text-align:center;font-size:11px;min-width:0}
+  .cfsrow .cs i{display:block;height:38px;border-radius:8px;border:1px solid #ffffff2a;margin-bottom:4px}
+  .cfsrow .cs.sel i{outline:2px solid var(--accent);outline-offset:2px}
+  .cfsrow .cs.sel .slotn{color:var(--accent);font-weight:600}
+  .cfsrow .cs .slotn{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:3px}
+  .cfsrow .cs span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .band{display:flex;gap:22px;flex-wrap:wrap;font-size:14px}
+  .band b{font-family:var(--mono);font-weight:400;color:#FFB47A}
+  .bandlink{margin-left:auto;font-size:12px;text-decoration:none}
+  /* Plateau en mode tuile (vue d'ensemble) */
+  .t-plate{padding:0}
+  .t-plate #plateCard{border:0;background:none;height:100%;display:flex;flex-direction:column;padding:16px;box-sizing:border-box}
+  #plateCard.compact .gbar,#plateCard.compact .glayer,#plateCard.compact .tleg,#plateCard.compact .phint,#plateCard.compact .ptools label{display:none}
+  #plateCard.compact .pwrap{flex:1;min-height:360px;position:relative}
+  #plateCard.compact #plateSvg{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto}
+  #plateCard.compact .pl-list{flex-direction:row;flex-wrap:wrap;gap:6px;margin-top:8px}
+  #plateCard.compact .pl-item .dimtxt{display:none}
+  #plateCard .openfull{margin-left:10px;font-size:12px;color:var(--accent);text-decoration:none}
+  .view[data-view=safety] > .card,.view[data-view=control] > .card{max-width:980px}
+  #plateCard:not(.compact) .openfull{display:none}
+  .view[data-view=plate] #plateSvg{max-height:calc(100vh - 330px)}
+  .view[data-view=plate] .pwrap{display:flex;justify-content:center}
+  .view[data-view=plate] #plateSvg{width:auto;max-width:100%;aspect-ratio:1}
+  /* Barre d'actions fixe */
+  .actionbar{position:sticky;bottom:0;z-index:20;background:#121519;border-top:1px solid var(--line);padding:10px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .actionbar button{padding:8px 14px}
+  .actionbar .sep{width:1px;height:26px;background:var(--line)}
+  .actionbar .tin input{width:64px}
+  .actionbar .sw{margin-left:0}
+  .abspeed{display:flex;align-items:center;gap:8px;font-size:13px}
+  .abspeed input{width:110px;accent-color:var(--accent);padding:0;border:0;background:none}
+  .abspeed b{font-family:var(--mono);font-weight:400;font-size:12px;min-width:38px}
+  .abz{display:flex;align-items:center;gap:4px;font-size:13px}
+  .abz button{font-family:var(--mono);font-size:12px;padding:6px 9px}
+  @media (max-width:1150px){.bento{grid-template-columns:repeat(2,minmax(0,1fr))}.t-band{grid-column:span 2}}
+  @media (max-width:760px){
+    .app{flex-direction:column}
+    .side{position:static;height:auto;width:auto;flex-direction:row;flex-wrap:wrap;overflow:visible}
+    .side .grow,.connbox{display:none}
+    .nav{width:auto;padding:8px 10px;font-size:13px}
+    .bento{grid-template-columns:1fr}.t-cam,.t-plate,.t-band{grid-column:auto;grid-row:auto}
+    header.top,.view,.actionbar{padding-left:16px;padding-right:16px}
+  }
+
+  /* ---- Fichiers / Historique / Console / Déplacements ---- */
+  .fdrop{border:2px dashed var(--line);border-radius:10px;padding:16px;text-align:center;color:var(--muted);font-size:13px;margin-bottom:12px;transition:.15s}
+  .fdrop.on{border-color:var(--accent);background:#ff7a1a14;color:var(--text)}
+  .fsearch{width:100%;max-width:340px;margin-bottom:10px}
+  .ftable{display:flex;flex-direction:column}
+  .frow{display:grid;grid-template-columns:54px minmax(0,2.4fr) 80px 70px 80px 140px 270px;gap:12px;align-items:center;padding:8px 6px;border-bottom:1px solid #ffffff0a;font-size:13px}
+  .frow.fhead{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line)}
+  .frow img{width:54px;height:54px;object-fit:contain;background:#08090b;border:1px solid var(--line);border-radius:6px}
+  .frow .fname{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .frow span:not(.fname):not(.facts){font-family:var(--mono);font-size:12px;color:#C4C9D0}
+  .facts{display:flex;gap:6px;justify-content:flex-end}
+  .facts button{padding:5px 10px;font-size:12px}
+  .hrow{grid-template-columns:minmax(0,2.4fr) 140px 110px 80px 110px 90px}
+  .hsum{font-size:13px;color:var(--muted);margin-bottom:10px}
+  @media (max-width:900px){.frow{grid-template-columns:44px minmax(0,1fr) auto}.frow > span:nth-child(n+3):not(.facts){display:none}.frow img{width:44px;height:44px}.hrow{grid-template-columns:minmax(0,1fr) auto}.hrow > span:nth-child(n+2):not(.facts){display:none}}
+  .cout{background:#08090b;border:1px solid var(--line);border-radius:8px;height:300px;overflow:auto;padding:10px 12px;font:12px/1.6 var(--mono)}
+  .cout .bad{color:#ffb3b3}
+  .cin{display:flex;gap:8px;align-items:center;margin:10px 0}
+  .cin span{color:var(--accent);font-family:var(--mono)}
+  .cin input{flex:1;font-family:var(--mono)}
+  .mvgrid{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
+  .jog{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(3,44px);gap:6px}
+  .jog button,.jogz button{padding:0;font-family:var(--mono);font-size:13px}
+  .jogz{display:grid;grid-template-rows:repeat(3,44px);gap:6px;width:96px}
+  .jogopt{display:flex;flex-direction:column;gap:8px}
+  .cgrp .sep{width:1px;height:24px;background:var(--line)}
+  .askin input{margin-top:4px}
+  #alarmBar{position:fixed;top:0;left:0;right:0;z-index:50;background:#c62828;color:#fff;padding:12px 20px;font-weight:600;display:none;align-items:center;gap:14px;box-shadow:0 4px 20px #0008;animation:blink 1s infinite}
+  #alarmBar button{margin-left:auto;background:#fff;color:#c62828;border:0;font-weight:600}
+  @keyframes blink{50%{background:#8e1c1c}}
+  .swatch{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid #ffffff33}
+  .hide{display:none!important}
+  #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+  #toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+<nav class="side" aria-label="Sections">
+  <div class="brand"><span class="logo"></span><b>K1 Max</b><span id="model"></span></div>
+  <button class="nav on" data-view="overview"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Vue d'ensemble</button>
+  <button class="nav" data-view="plate"><svg aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 15l3-4 3 3 3-5"/></svg>Plateau &amp; G-code</button>
+  <button class="nav" data-view="mesh"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 4-6 5 4"/><path d="M3 21h18"/></svg>Bed mesh</button>
+  <button class="nav" data-view="control"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>Contrôle complet</button>
+  <button class="nav" data-view="files"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4h6l2 2h8v13a1 1 0 0 1-1 1H4z"/></svg>Fichiers</button>
+  <button class="nav" data-view="history"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Historique</button>
+  <button class="nav" data-view="console"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17l6-5-6-5M12 19h8"/></svg>Console G-code</button>
+  <button class="nav" data-view="temps"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 19V9M10 19V5M16 19v-7M22 19H2"/></svg>Températures</button>
+  <button class="nav" data-view="data"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Données brutes</button>
+  <div class="grow"></div>
+  <button id="safePill" class="safepill off" data-view="safety" title="Sécurité — cliquer pour les réglages">Sécurité —</button>
+  <button class="nav" data-view="safety" id="setBtn"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>Sécurité &amp; alertes</button>
+  <div class="connbox">
+    <div class="connst"><span class="dot" id="dot"></span><span id="connTxt">Déconnecté</span></div>
+    <input id="ip" value="192.168.0.163" spellcheck="false" title="Adresse IP de l'imprimante" aria-label="Adresse IP de l'imprimante">
+    <div class="connbtns"><button id="btn">Connecter</button><button id="scanBtn" title="Cherche l'imprimante sur ton réseau">Scanner</button></div>
+  </div>
+</nav>
+
+<main class="content">
+  <header class="top">
+    <img id="thumb" class="thumb hide" alt="aperçu de l'impression">
+    <div class="tinfo">
+      <div class="file" id="file">Aucun fichier</div>
+      <div class="tsub"><span class="badge" id="state">—</span> · couche <span id="layer">—</span></div>
+    </div>
+    <div class="tprog"><div class="bar"><div id="barFill"></div></div><div class="pct" id="pct">0<small> %</small></div></div>
+    <div class="ttimes">écoulé <b id="elapsed">—</b> · reste <b id="left">—</b> · fin <b id="eta">—</b></div>
+  </header>
+
+  <section class="view on" data-view="overview">
+    <div class="bento">
+      <div class="tile t-cam"><div class="cam" id="cam"><span>Caméra non disponible</span></div></div>
+      <div class="tile t-plate" id="plateTile"></div>
+      <div class="tile t-temp go" data-go="temps" title="Voir les températures" style="--c:var(--nozzle)"><div class="th">Buse<a href="#temps" data-go="temps">›</a></div><div class="tv" id="tN">—</div><div class="tt" id="tNt">cible —</div></div>
+      <div class="tile t-temp go" data-go="temps" title="Voir les températures" style="--c:var(--bed)"><div class="th">Plateau · Enceinte<a href="#temps" data-go="temps">›</a></div><div class="tv" id="tB">—</div><div class="tt"><span id="tBt">cible —</span> · enceinte <span id="tC">—</span></div></div>
+      <div class="tile t-mesh go" data-go="mesh" title="Voir le bed mesh"><div class="th">Bed mesh<a href="#mesh" data-go="mesh">›</a></div><div class="mmini" id="mMini"></div><div class="tt" id="mMiniTxt">Aucun maillage</div></div>
+      <div class="tile t-live go" data-go="data" title="Voir toutes les données"><div class="th">En direct</div>
+        <div class="live">
+          <div><span>Vitesse</span><b id="lvSpeed">—</b></div>
+          <div><span>Débit</span><b id="lvFlow">—</b></div>
+          <div><span>Hauteur Z</span><b id="lvZ">—</b></div>
+          <div><span>Filament</span><b id="lvFil">—</b></div>
+        </div></div>
+      <div class="tile t-cfs hide" id="cfsCard"><div class="th">CFS<span class="meta" id="cfsMeta" style="margin-left:8px;text-transform:none;letter-spacing:0"></span></div><div class="cfsrow" id="cfsTile"></div></div>
+      <div class="tile t-band go" data-go="control" title="Ouvrir le contrôle complet"><div class="th">Ventilateurs</div><div class="band" id="ovFans"></div><a href="#control" data-go="control" class="bandlink">Contrôle complet ›</a></div>
+    </div>
+  </section>
+
+  <section class="view" data-view="plate"><div id="plateFull"></div></section>
+  <section class="view" data-view="mesh"></section>
+  <section class="view" data-view="control"></section>
+  <section class="view" data-view="temps">
+    <section class="card">
+      <h2>Températures — 10 dernières minutes</h2>
+      <canvas id="chart"></canvas>
+      <div class="legend"><span><i style="background:var(--nozzle)"></i>Buse</span><span><i style="background:var(--bed)"></i>Plateau</span><span><i style="background:var(--box)"></i>Enceinte</span></div>
+    </section>
+  </section>
+  <section class="view" data-view="files">
+    <section class="card" id="filesCard">
+      <div class="phead"><h2>Fichiers sur l'imprimante</h2>
+        <div class="ptools"><button id="fRefresh">Rafraîchir</button><button id="fUpBtn">Envoyer un G-code…</button><input type="file" id="fUp" accept=".gcode" hidden></div></div>
+      <div class="fdrop" id="fDrop">Glisse un fichier <b>.gcode</b> ici pour l'envoyer à l'imprimante<span id="fUpStat"></span></div>
+      <input id="fSearch" placeholder="Filtrer par nom…" spellcheck="false" class="fsearch">
+      <div class="ftable" id="fList"><div class="empty">Chargement…</div></div>
+    </section>
+  </section>
+  <section class="view" data-view="history">
+    <section class="card" id="histCard">
+      <div class="phead"><h2>Historique des impressions</h2><div class="ptools"><button id="hRefresh">Rafraîchir</button></div></div>
+      <div class="hsum" id="hSum"></div>
+      <div class="ftable" id="hList"><div class="empty">Chargement…</div></div>
+    </section>
+  </section>
+  <section class="view" data-view="console">
+    <section class="card" id="consoleCard">
+      <h2>Console G-code</h2>
+      <div class="cout" id="gOut"><div class="meta">Les commandes sont envoyées telles quelles à Klipper (gcodeCmd). L'imprimante ne renvoie pas de réponse texte : regarde l'effet dans les données.</div></div>
+      <form class="cin" id="gForm"><span>›</span><input id="gIn" placeholder="ex. M115, G28, M84…" spellcheck="false" autocomplete="off" aria-label="Commande G-code"><button>Envoyer</button></form>
+      <div class="crow presets" id="gQuick">
+        <button type="button" data-g="M84">M84 · moteurs off</button><button type="button" data-g="G28">G28 · origine</button>
+        <button type="button" data-g="M106 S0">Ventilo pièce off</button><button type="button" data-g="M104 S0">Buse 0 °C</button><button type="button" data-g="M140 S0">Plateau 0 °C</button>
+        <button type="button" data-g="BED_MESH_CLEAR">BED_MESH_CLEAR</button>
+      </div>
+      <label class="chk" style="margin-top:10px"><input type="checkbox" id="gNoAsk"> Ne plus demander de confirmation (cette session)</label>
+    </section>
+  </section>
+  <section class="view" data-view="data"></section>
+  <section class="view" data-view="safety"></section>
+
+  <footer class="actionbar" aria-label="Actions rapides">
+    <button id="abPause">Pause</button>
+    <button id="abResume">Reprendre</button>
+    <button id="abStop" class="danger">Arrêter</button>
+    <span class="sep"></span>
+    <label class="sw"><input type="checkbox" id="abLight"><span></span> Lumière</label>
+    <span class="sep"></span>
+    <label class="tin">Buse <input type="number" id="abNoz" min="0" max="300" step="5"></label>
+    <label class="tin">Plateau <input type="number" id="abBed" min="0" max="110" step="5"></label>
+    <button id="abSet">Régler</button>
+    <span class="sep"></span>
+    <label class="abspeed">Vitesse <input type="range" id="abSpeed" min="50" max="150" step="5"><b id="abSpeedv">—</b></label>
+    <span class="abz">Z <button data-abz="-0.01">−0.01</button><button data-abz="0.01">+0.01</button></span>
+  </footer>
+</main>
+</div>
+
+<div id="parking" hidden>
+<section class="card" id="plateCard">
+      <div class="phead">
+        <h2>Plateau</h2>
+        <div class="ptools">
+          <button data-fit="objs">Pièces</button>
+          <button data-fit="bed">Plateau entier</button>
+          <label class="chk"><input type="checkbox" id="trailChk" checked> Trajet buse</label>
+        </div>
+      </div>
+      <div class="pwrap">
+        <svg id="plateSvg" xmlns="http://www.w3.org/2000/svg">
+          <rect id="pBed" x="0" y="0" width="300" height="300" rx="3"/>
+          <g id="pGrid"></g><g id="pGhost"></g><g id="pGcode"></g><g id="pObjs"></g>
+          <path id="pTrailL" fill="none"/><path id="pTrailT" fill="none"/><path id="pTrailP" fill="none"/><g id="pNoz"></g><g id="pLabels"></g>
+        </svg>
+        <div class="ptip" id="ptip"></div>
+        <div class="pinfo" id="pinfo"></div>
+        <div class="pempty" id="pempty">Aucune pièce reçue</div>
+      </div>
+      <div class="gbar">
+        <button id="gLoad">Charger le G-code…</button>
+        <input type="file" id="gFile" accept=".gcode,.gco,.g" hidden>
+        <span id="gStat" class="gstat">Pour voir la vraie forme des pièces, charge le .gcode (ou glisse-le sur le plateau)</span>
+      </div>
+      <div class="glayer hide" id="gLayerRow">
+        <button id="gPrev">◀</button>
+        <input type="range" id="gSlider" min="1" max="1" value="1">
+        <button id="gNext">▶</button>
+        <span id="gLayerTxt" class="gltxt"></span>
+        <label class="chk"><input type="checkbox" id="gFollow" checked> Suivre l'impression</label>
+        <select id="gView"><option value="walls">Murs</option><option value="all" selected>Tout</option><option value="outer">Contour extérieur</option></select>
+      </div>
+      <div class="tleg">
+        <span><i></i>Positions de la buse</span>
+        <span class="gonly hide"><i class="done"></i>Déjà imprimé</span><span class="gonly hide"><i class="todo"></i>À venir</span>
+        <label class="chk"><input type="checkbox" id="trailLines"> Relier les points</label>
+      </div>
+      <div class="pl-list" id="plateList"></div>
+      <div class="phint">Molette = zoom · glisser = déplacer · double-clic = recentrer · clic sur une pièce de la liste = zoom dessus</div>
+    </section>
+<section class="card" id="meshCard">
+      <div class="phead">
+        <h2>Bed mesh</h2>
+        <div class="ptools">
+          <span class="seg"><button id="mV3" class="on">3D</button><button id="mV2">2D</button></span>
+          <button id="mFetch" title="Essaie de lire le maillage sur l'imprimante">Lire l'imprimante</button>
+          <button id="mImport" title="printer.cfg, JSON Moonraker ou texte collé">Importer…</button>
+          <input type="file" id="mFile" accept=".cfg,.json,.txt,.conf" hidden>
+        </div>
+      </div>
+      <div class="mstat" id="mStat">Aucun maillage chargé.</div>
+      <div class="mwrap hide" id="mWrap">
+        <div class="mviews">
+          <div id="mBox3"><canvas id="m3d"></canvas><div class="mhint">Glisser = tourner · molette = exagération du relief</div></div>
+          <div id="mBox2" class="hide"><canvas id="mHeat"></canvas></div>
+        </div>
+        <div class="mstats" id="mStats"></div>
+      </div>
+      <details class="mpaste"><summary>Coller un maillage (bloc SAVE_CONFIG du printer.cfg ou réponse JSON)</summary>
+        <textarea id="mText" spellcheck="false" placeholder="#*# [bed_mesh default]&#10;#*# points =&#10;#*# 	0.05, 0.02, -0.01, …&#10;#*# min_x = 5&#10;…"></textarea>
+        <button id="mParse">Afficher</button>
+      </details>
+    </section>
+<section class="card" id="ctrlCard">
+      <h2>Contrôle</h2>
+      <div class="cerr hide" id="cErr"><span id="cErrTxt"></span><button id="cClean">Effacer l'erreur</button></div>
+      <div class="cgrp">
+        <div class="ck">Impression</div>
+        <div class="crow">
+          <button id="cPause">⏸ Pause</button>
+          <button id="cResume">▶ Reprendre</button>
+          <button id="cStop" class="danger">⏹ Arrêter</button>
+          <label class="sw"><input type="checkbox" id="cLight"><span></span> Lumière</label>
+        </div>
+      </div>
+      <div class="cgrp">
+        <div class="ck">Températures</div>
+        <div class="crow">
+          <label class="tin">Buse <input type="number" id="cNoz" min="0" max="300" step="5"> °C</label>
+          <button id="cNozSet">Régler</button>
+          <label class="tin">Plateau <input type="number" id="cBed" min="0" max="110" step="5"> °C</label>
+          <button id="cBedSet">Régler</button>
+        </div>
+        <div class="crow presets">
+          <button data-pre="220,55">PLA</button><button data-pre="240,70">PETG</button><button data-pre="260,100">ABS/ASA</button>
+          <button id="cCool" title="Met buse et plateau à 0 °C">❄ Tout refroidir</button>
+        </div>
+      </div>
+      <div class="cgrp">
+        <div class="ck">Ventilateurs & vitesse</div>
+        <div class="sl"><span>Pièce</span><input type="range" id="cFan0" min="0" max="100" step="5"><b id="cFan0v">—</b></div>
+        <div class="sl"><span>Boîtier</span><input type="range" id="cFan1" min="0" max="100" step="5"><b id="cFan1v">—</b></div>
+        <div class="sl"><span>Auxiliaire</span><input type="range" id="cFan2" min="0" max="100" step="5"><b id="cFan2v">—</b></div>
+        <div class="sl"><span>Vitesse</span><input type="range" id="cSpeed" min="50" max="150" step="5"><b id="cSpeedv">—</b></div>
+      </div>
+      <div class="cgrp">
+        <div class="ck">Z offset (en direct) <span class="meta" id="cZtot"></span></div>
+        <div class="crow zrow">
+          <button data-z="-0.05">−0.05</button><button data-z="-0.01">−0.01</button><button data-z="-0.005">−0.005</button>
+          <button data-z="0.005">+0.005</button><button data-z="0.01">+0.01</button><button data-z="0.05">+0.05</button>
+          <button id="cZsave" title="Enregistre le Z offset dans l'imprimante">Enregistrer</button>
+        </div>
+        <div class="meta">− rapproche la buse du plateau · + l'éloigne</div>
+      </div>
+      <div class="cgrp">
+        <div class="ck">Déplacements</div>
+        <div class="mvgrid">
+          <div class="jog">
+            <span></span><button data-mv="Y" data-dir="1" aria-label="Y plus (vers l'arrière)">Y+</button><span></span>
+            <button data-mv="X" data-dir="-1" aria-label="X moins">X−</button><button id="mvHomeXY" title="Origine X Y">⌂ XY</button><button data-mv="X" data-dir="1" aria-label="X plus">X+</button>
+            <span></span><button data-mv="Y" data-dir="-1" aria-label="Y moins (vers l'avant)">Y−</button><span></span>
+          </div>
+          <div class="jogz">
+            <button data-mv="Z" data-dir="-1" title="Z diminue : le plateau monte vers la buse">▲ Plateau</button>
+            <button id="mvHomeZ" title="Origine Z">⌂ Z</button>
+            <button data-mv="Z" data-dir="1" title="Z augmente : le plateau descend">▼ Plateau</button>
+          </div>
+          <div class="jogopt">
+            <div class="meta">Pas</div>
+            <div class="seg" id="mvStep"><button data-st="0.1">0.1</button><button data-st="1">1</button><button data-st="10" class="on">10</button><button data-st="50">50</button></div>
+            <button id="mvHomeAll">⌂ Origine complète</button>
+            <div class="meta" id="mvPos">X — · Y — · Z —</div>
+          </div>
+        </div>
+        <div class="meta">Sur la K1, c'est le plateau qui bouge en Z. Déplacements bloqués pendant une impression ; fais l'origine avant de déplacer.</div>
+      </div>
+      <div class="cgrp" id="cfsCtrl">
+        <div class="ck">CFS</div>
+        <div class="crow">
+          <label class="tin">Slot <select id="cfsSlot"><option value="1:0">1A</option><option value="1:1">1B</option><option value="1:2">1C</option><option value="1:3">1D</option></select></label>
+          <button id="cfsLoad">Charger</button><button id="cfsUnload">Décharger</button>
+          <span class="sep"></span>
+          <label class="sw"><input type="checkbox" id="cfsAuto"><span></span> Recharge auto</label>
+        </div>
+        <div class="crow">
+          <label class="tin">Séchage <input type="number" id="cfsDryT" min="0" max="65" step="5" value="45"> °C</label>
+          <button id="cfsDry">Démarrer</button><button id="cfsDryOff">Arrêter</button>
+          <span class="meta" id="cfsEnv"></span>
+        </div>
+        <div class="meta">Commandes documentées par la communauté (testées sur K1C) — essaie d'abord sans impression en cours.</div>
+      </div>
+      <div class="cgrp">
+        <div class="ck">Maintenance</div>
+        <div class="crow">
+          <button id="mtPlr" title="Reprendre une impression interrompue par une coupure de courant">Reprendre après coupure</button>
+          <button id="mtKlipper">Redémarrer Klipper</button>
+          <button id="mtFw" class="danger">Redémarrer le firmware</button>
+          <button id="mtMesh" class="danger">Effacer le bed mesh</button>
+        </div>
+      </div>
+      <div class="clog" id="cLog"></div>
+    </section>
+<section class="card full" id="dataCard">
+    <div class="dhead">
+      <h2>Toutes les données</h2><span class="count" id="nKeys">0 champs</span>
+      <div class="tools">
+        <input id="search" placeholder="Rechercher (ex. fan, cfs, temp)…" spellcheck="false">
+        <label class="chk"><input type="checkbox" id="showRaw"> Clés brutes</label>
+        <label class="chk"><input type="checkbox" id="onlyChanged"> Qui bougent</label>
+        <button id="copyBtn">Copier le JSON</button>
+      </div>
+    </div>
+    <div class="cats" id="cats"></div>
+  </section>
+<section class="card" id="safeCard">
+      <div class="phead">
+        <h2>Sécurité</h2>
+        <label class="chk sw-arm"><input type="checkbox" id="sArm" checked> Surveillance active</label>
+      </div>
+      <div class="sstat" id="sStat">En attente de données…</div>
+      <div class="sgrid">
+        <label>Buse max <span><input type="number" id="sNoz" value="300" min="100" max="350"> °C</span></label>
+        <label>Plateau max <span><input type="number" id="sBed" value="110" min="40" max="130"> °C</span></label>
+        <label>Pendant <span><input type="number" id="sDur" value="5" min="1" max="60"> s</span></label>
+      </div>
+      <div class="sacts">
+        <label class="chk"><input type="checkbox" id="sStop" checked> Arrêter l'impression</label>
+        <label class="chk"><input type="checkbox" id="sHeat" checked> Couper les chauffes</label>
+        <label class="chk"><input type="checkbox" id="sSound" checked> Alarme sonore</label>
+        <label class="chk"><input type="checkbox" id="sLost" checked> Alerte si connexion perdue pendant une impression</label>
+      </div>
+      <div class="sbtns">
+        <button id="sTest">Tester l'alarme (n'arrête rien)</button>
+        <button id="sAck" class="hide">Couper l'alarme / réarmer</button>
+      </div>
+      <div class="slog" id="sLog"></div>
+
+      <div class="remote">
+        <h3>Alertes sur ton téléphone</h3>
+        <div class="rgrid">
+          <label>Mon serveur (URL du dossier k1-alertes)<input id="rUrl" placeholder="https://ton-domaine.com/k1-alertes" spellcheck="false"></label>
+          <label>Jeton du serveur (dans config.php)<input id="rTok" type="password" spellcheck="false" autocomplete="off"></label>
+        </div>
+        <div class="hint2">Et/ou ntfy.sh (laisser le sujet vide pour ne pas l'utiliser) :</div>
+        <div class="rgrid">
+          <label>Sujet ntfy (comme un mot de passe)<input id="rTopic" spellcheck="false"></label>
+          <label>Courriel (optionnel)<input id="rEmail" type="email" placeholder="toi@gmail.com" spellcheck="false"></label>
+          <label>SMS par courriel (optionnel)<input id="rSms" placeholder="4185551234@txt.bell.ca" spellcheck="false"></label>
+        </div>
+        <label class="chk" style="margin-bottom:8px"><input type="checkbox" id="rImg" checked> Joindre une capture (caméra + plateau + températures)</label>
+        <div class="sbtns"><button id="rTest">Envoyer une alerte test (priorité max)</button><button id="rPrev">Aperçu de la capture</button><span id="rStat" class="rstat"></span></div>
+      </div>
+    </section>
+</div>
+<div id="toast"></div>
+<div id="askBox" class="hide"><div class="askin"><h3 id="askT"></h3><p id="askD"></p><div class="askb"><button id="askNo">Annuler</button><button id="askYes">Confirmer</button></div></div></div>
+<div id="alarmBar"><span id="alarmTxt">ALERTE</span><button id="alarmAck">Couper l'alarme</button></div>
+
+<script>
+/* ================= Config ================= */
+const PORT = 9999;
+const STATES = {0:["Inactive",""],1:["Impression","printing"],2:["Terminée",""],3:["Échec / arrêt","error"],4:["Annulée","error"],5:["Pause","paused"]};
+
+// Catégories : la première règle qui correspond gagne
+const CATS = [
+  {id:"temp",  name:"Températures",          c:"#ff7a1a", re:/temp/i},
+  {id:"cfs",   name:"CFS / Filament",        c:"#e879f9", re:/cfs|boxs?(?!temp)|material|filament|slot|rfid|colou?r|buffer|spool|nozzleMove/i},
+  {id:"fan",   name:"Ventilateurs & lumière",c:"#f5b942", re:/fan|light|led/i},
+  {id:"print", name:"Impression",            c:"#3ecf8e", re:/print|layer|progress|job|file|state|speed|flow|feed|history|plr|pause|used|totalJob|objects?$|exclude/i},
+  {id:"move",  name:"Mouvement",             c:"#4aa8ff", re:/pos|axis|home|move|offset|accel|level|mesh|probe/i},
+  {id:"sys",   name:"Système & réseau",      c:"#94a3b8", re:/model|host|version|ip|mac|wifi|ssid|upgrade|firmware|video|webrtc|cam|ai[A-Z]|^ai|err|self|device|^sn|serial|time|power|lan|net|cloud/i},
+  {id:"other", name:"Autres",                c:"#64748b", re:/./},
+];
+
+// Libellés lisibles pour les champs connus (le reste est déduit du nom)
+const LABELS = {
+  nozzleTemp:"Buse", targetNozzleTemp:"Buse — cible", maxNozzleTemp:"Buse — max",
+  bedTemp0:"Plateau", targetBedTemp0:"Plateau — cible", maxBedTemp:"Plateau — max",
+  boxTemp:"Enceinte", targetBoxTemp:"Enceinte — cible",
+  state:"État", deviceState:"État de l'appareil", printFileName:"Fichier", printProgress:"Progression", dProgress:"Progression (détaillée)",
+  layer:"Couche actuelle", TotalLayer:"Couches totales", printJobTime:"Temps écoulé", printLeftTime:"Temps restant",
+  printStartTime:"Début de l'impression", usedMaterialLength:"Filament utilisé", realTimeSpeed:"Vitesse réelle", realTimeFlow:"Débit réel",
+  curFeedratePct:"Vitesse (%)", curFlowratePct:"Débit (%)", curPosition:"Position", autohome:"Origine faite",
+  fan:"Ventilateur pièce", fanCase:"Ventilateur boîtier", fanAuxiliary:"Ventilateur auxiliaire", lightSw:"Lumière",
+  hostname:"Nom d'hôte", model:"Modèle", modelVersion:"Version firmware", err:"Erreur", video:"Caméra", video1:"Caméra 2",
+  webrtcSupport:"WebRTC", aiSw:"Détection IA", aiDetection:"Détection IA (état)", materialDetect:"Détection filament",
+  materialStatus:"État du filament", cfsConnect:"CFS connecté", enableSelfTest:"Auto-test activé", withSelfTest:"Auto-test",
+  upgradeStatus:"Mise à jour", objects:"Pièces sur le plateau", excluded_objects:"Pièces exclues",
+  probedMatrix:"Maillage du plateau", historyList:"Historique", retGcodeFileInfo:"Fichiers (liste)", retGcodeFileInfo2:"Fichiers (liste)", boxsInfo:"CFS — bobines", boxConfig:"CFS — réglages", autoRefill:"Recharge automatique", cAutoFeed:"Chargement auto", cSelfTest:"Auto-test CFS", cAutoUpdateFilament:"Mise à jour auto du filament", autoLevelResult:"Résultat du nivellement", pressureAdvance:"Pressure advance",
+  smoothTime:"Smooth time (PA)", velocityLimits:"Vitesse max", accelerationLimits:"Accélération max",
+  accelToDecelLimits:"Accel → décel max", cornerVelocityLimits:"Square corner velocity", modelFanPct:"Ventilateur pièce (%)",
+  caseFanPct:"Ventilateur boîtier (%)", auxiliaryFanPct:"Ventilateur auxiliaire (%)", tfCard:"Carte SD", powerLoss:"Coupure de courant",
+  aiFirstFloor:"IA : 1re couche", aiPausePrint:"IA : pause auto", feedState:"Alimentation filament", videoElapse:"Timelapse",
+  videoElapseFrame:"Timelapse : images/s", videoElapseInterval:"Timelapse : intervalle", nozzleMoveSnapshot:"Photo au déplacement",
+  bedTempAutoPid:"PID auto plateau", nozzleTempAutoPid:"PID auto buse", printId:"ID d'impression", connect:"Connecté",
+  bedTemp1:"Plateau zone 2", bedTemp2:"Plateau zone 3", targetBedTemp1:"Plateau zone 2 — cible", targetBedTemp2:"Plateau zone 3 — cible", currentObject:"Pièce en cours", excludedObjects:"Pièces exclues", totalJob:"Impressions totales", repoPlrStatus:"Reprise après coupure",
+};
+
+/* ================= État ================= */
+const data = {};
+const hist = [];
+const HIST_MS = 10*60*1000;
+let ws = null, hb = null, retry = null, wanted = false, everOpened = false, scanning = false;
+const rows = {};          // clé -> {el, cat, lastChange}
+const catEls = {};        // id -> {card, body, n}
+
+const $ = id => document.getElementById(id);
+const num = v => { if (v === "" || v === null || v === undefined || typeof v === "boolean") return null; const n = Number(v); return isNaN(n) ? null : n; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDur = s => { s = num(s); if (s===null) return "—"; s = Math.max(0,Math.round(s));
+  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return (h? h+"h ":"") + String(m).padStart(h?2:1,"0")+"m " + String(x).padStart(2,"0")+"s"; };
+const fmtDeg = v => { v = num(v); return v===null ? "—" : v.toFixed(1)+"°"; };
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2200); }
+const saveIp = ip => { try { localStorage.setItem("k1ip", ip); } catch(e){} };
+
+/* ================= Connexion ================= */
+function setConn(kind, txt){
+  $("dot").className = "dot " + (kind==="on"?"on":kind==="busy"?"busy":"");
+  $("connTxt").textContent = txt;
+  $("btn").textContent = wanted ? "Déconnecter" : "Connecter";
+  $("scanBtn").disabled = scanning;
+}
+
+function connect(){
+  clearTimeout(retry);
+  const ip = $("ip").value.trim();
+  saveIp(ip);
+  wanted = true; everOpened = false; setConn("busy", "Connexion…");
+  try { ws = new WebSocket(`ws://${ip}:${PORT}`); } catch(e){ setConn("", "IP invalide"); return; }
+  const openTimer = setTimeout(() => { if (ws.readyState !== 1) ws.close(); }, 5000);
+  ws.onopen = () => {
+    clearTimeout(openTimer); everOpened = true;
+    setConn("on", "Connecté");
+    hb = setInterval(() => ws.readyState===1 && ws.send(JSON.stringify({ModeCode:"heart_beat", msg:new Date().toISOString()})), 10000);
+    startCam(ip);
+    thumbFor = null; setTimeout(() => { meshFetch(); refreshThumb(); cfsAsk(); if (curView === "files") wsGet("reqGcodeFile"); if (curView === "history") wsGet("reqHistory"); }, 800);   // maillage + aperçu + CFS à chaque connexion
+  };
+  ws.onmessage = e => {
+    if (e.data === "ok") return;
+    if (typeof e.data === "string" && e.data.includes("heart_beat")){ try { ws.send("ok"); } catch(_){} return; }
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    if (m && typeof m === "object" && !Array.isArray(m)) update(m);
+  };
+  ws.onclose = () => {
+    clearTimeout(openTimer); clearInterval(hb);
+    if (!wanted){ setConn("", "Déconnecté"); return; }
+    if (!everOpened){
+      // L'IP ne répond pas : l'imprimante a probablement changé d'adresse → on scanne
+      setConn("busy", "Aucune réponse — scan…");
+      scan();
+    } else {
+      setConn("busy", "Perdu — reconnexion…");
+      retry = setTimeout(connect, 4000);
+    }
+  };
+  ws.onerror = () => {};
+}
+function disconnect(){ wanted = false; clearTimeout(retry); ws && ws.close(); $("cam").innerHTML = "<span>Caméra non disponible</span>"; setConn("", "Déconnecté"); }
+$("btn").onclick = () => wanted ? disconnect() : connect();
+$("ip").addEventListener("keydown", e => { if (e.key === "Enter"){ wanted && disconnect(); connect(); } });
+
+/* ================= Scan du réseau ================= */
+// Essaie d'ouvrir un websocket sur le port 9999 de chaque adresse du sous-réseau.
+// La première qui répond avec des données d'imprimante gagne.
+function probe(ip, timeout = 1800){
+  return new Promise(res => {
+    let done = false, s;
+    const finish = ok => { if (done) return; done = true; clearTimeout(t); try { s.close(); } catch(e){} res(ok ? ip : null); };
+    const t = setTimeout(() => finish(false), timeout);
+    try { s = new WebSocket(`ws://${ip}:${PORT}`); } catch(e){ return finish(false); }
+    s.onmessage = e => { try { const m = JSON.parse(e.data); if (m && typeof m === "object") finish(true); } catch(_){} };
+    s.onopen = () => setTimeout(() => finish(true), 600);   // port 9999 ouvert = très probablement l'imprimante
+    s.onerror = () => finish(false);
+  });
+}
+
+async function scan(){
+  if (scanning) return;
+  scanning = true;
+  if (ws && ws.readyState <= 1){ wanted = false; ws.close(); }
+  const cur = $("ip").value.trim().split(".");
+  const bases = [...new Set([cur.length === 4 ? cur.slice(0,3).join(".") : null, "192.168.0", "192.168.1"].filter(Boolean))];
+  let found = null;
+  outer:
+  for (const base of bases){
+    const ips = [];
+    for (let i = 1; i <= 254; i++) ips.push(`${base}.${i}`);
+    for (let i = 0; i < ips.length; i += 48){
+      setConn("busy", `Scan ${base}.x — ${Math.min(i+48,254)}/254`);
+      const r = await Promise.all(ips.slice(i, i+48).map(ip => probe(ip)));
+      found = r.find(Boolean);
+      if (found) break outer;
+    }
+  }
+  scanning = false;
+  if (found){
+    $("ip").value = found; saveIp(found);
+    toast(`Imprimante trouvée : ${found}`);
+    connect();
+  } else {
+    wanted = false;
+    setConn("", "Introuvable — imprimante allumée ?");
+    toast("Aucune imprimante trouvée sur le réseau");
+  }
+}
+$("scanBtn").onclick = () => { if (wanted) { wanted = false; ws && ws.close(); } scan(); };
+
+/* ================= Caméra ================= */
+function startCam(ip){
+  const img = new Image();
+  img.onerror = () => { $("cam").innerHTML = "<span>Caméra non disponible</span>"; };
+  img.onload = () => { $("cam").innerHTML = ""; $("cam").appendChild(img); };
+  img.src = `http://${ip}:8080/?action=stream`;
+}
+
+/* ================= Données ================= */
+function update(m){
+  const now = Date.now();
+  const todo = [];
+  for (let [k,v] of Object.entries(m)){
+    // Certains champs arrivent comme du texte qui contient du JSON → on le décode
+    if (typeof v === "string" && /^\s*[\[{]/.test(v)) { try { v = JSON.parse(v); } catch(e){} }
+    const changed = JSON.stringify(data[k]) !== JSON.stringify(v);
+    data[k] = v;
+    todo.push([k, changed && k in rows]);
+  }
+  // Toutes les valeurs d'abord, l'affichage ensuite (certains champs dépendent d'autres)
+  for (const [k, flash] of todo) upsertRow(k, flash, now);
+  if (todo.some(([k]) => /object/i.test(k)) && rows.objects && !todo.some(([k]) => k === "objects")) upsertRow("objects", false, now);
+  renderMain();
+  renderSlots();
+  renderCtrl();
+  updateCounts();
+  lastData = Date.now();
+  safetyCheck();
+  if ("probedMatrix" in m){ const ok = meshFromPoints(data.probedMatrix); if (meshWaiting){ const r = meshWaiting; meshWaiting = null; r(ok); } }
+  if ("printFileName" in m) refreshThumb();
+  if (("layer" in m || "curPosition" in m) && G.layers && $("gFollow").checked){ const rl = gRealLayer(); if (rl && rl !== G.layer) gSetLayer(rl); }
+  if ("printFileName" in m) gCheckName();
+  if (todo.some(([k]) => /object/i.test(k))) plateObjectsChanged();
+  if ("curPosition" in m) plateNozzle();
+}
+
+function renderMain(){
+  const st = STATES[num(data.state)] || [data.state ?? "—",""];
+  $("state").textContent = st[0]; $("state").className = "badge " + st[1];
+  $("file").textContent = data.printFileName ? String(data.printFileName).split("/").pop() : "Aucun fichier";
+  const p = num(data.printProgress ?? data.dProgress) ?? 0;
+  $("pct").innerHTML = Math.round(p) + "<small> %</small>";
+  $("barFill").style.width = Math.min(100,p) + "%";
+  // Le compteur de couches de l'imprimante peut dériver (ex. 326 / 163).
+  // Si le G-code est chargé, on calcule la vraie couche à partir de la hauteur Z de la buse.
+  const rl = typeof gRealLayer === "function" ? gRealLayer() : null;
+  if (rl){
+    $("layer").textContent = `${rl} / ${G.layers.length}`;
+    $("layer").title = `Calculé depuis Z (compteur de l'imprimante : ${data.layer ?? "?"} / ${data.TotalLayer ?? "?"})`;
+  } else {
+    $("layer").textContent = data.TotalLayer ? `${data.layer ?? 0} / ${data.TotalLayer}` : "—";
+    $("layer").title = num(data.layer) > num(data.TotalLayer) ? "Le compteur de l'imprimante dépasse le total : charge le G-code pour avoir la vraie couche" : "";
+  }
+  $("elapsed").textContent = fmtDur(data.printJobTime);
+  $("left").textContent = fmtDur(data.printLeftTime);
+  $("tN").textContent = fmtDeg(data.nozzleTemp);  $("tNt").textContent = "cible " + fmtDeg(data.targetNozzleTemp);
+  $("tB").textContent = fmtDeg(data.bedTemp0);    $("tBt").textContent = "cible " + fmtDeg(data.targetBedTemp0);
+  $("tC").textContent = fmtDeg(data.boxTemp);
+  const name = [data.model, data.hostname].filter(Boolean).join(" · ");
+  $("model").textContent = name;
+}
+
+const humanize = k => k.replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/[_-]+/g," ").replace(/^./, c => c.toUpperCase());
+const labelOf = k => LABELS[k] || humanize(k);
+const catOf = k => CATS.find(c => c.re.test(k)).id;
+
+function ensureCat(id){
+  if (catEls[id]) return catEls[id];
+  const c = CATS.find(x => x.id === id);
+  const card = document.createElement("div");
+  card.className = "cat"; card.style.setProperty("--c", c.c);
+  card.innerHTML = `<h3><i></i>${c.name}<span class="n">0</span></h3><div class="body"></div>`;
+  // garde l'ordre des catégories
+  const order = CATS.map(x => x.id);
+  const after = order.slice(order.indexOf(id)+1).map(x => catEls[x]).find(Boolean);
+  $("cats").insertBefore(card, after ? after.card : null);
+  return catEls[id] = {card, body: card.querySelector(".body"), n: card.querySelector(".n")};
+}
+
+function upsertRow(k, flash, now){
+  let r = rows[k];
+  if (!r){
+    const cat = catOf(k), ce = ensureCat(cat);
+    const el = document.createElement("div");
+    el.className = "row";
+    el.innerHTML = `<div><div class="lbl"></div><div class="key"></div></div><div class="val"></div>`;
+    el.querySelector(".lbl").textContent = labelOf(k);
+    el.querySelector(".key").textContent = k;
+    el.dataset.search = (k + " " + labelOf(k)).toLowerCase();
+    // insertion triée par libellé
+    const sib = [...ce.body.children].find(x => x.querySelector(".lbl").textContent.localeCompare(labelOf(k), "fr") > 0);
+    ce.body.insertBefore(el, sib || null);
+    r = rows[k] = {el, cat, lastChange: 0};
+  }
+  setValue(k, r.el.querySelector(".val"), data[k]);
+  if (flash){
+    r.lastChange = now;
+    r.el.classList.remove("flash"); void r.el.offsetWidth; r.el.classList.add("flash");
+  }
+  applyFilter(r);
+}
+
+function setValue(k, cell, v){
+  const row = cell.closest(".row");
+  const isObj = v !== null && typeof v === "object";
+  row.classList.toggle("objrow", isObj);
+  if (isObj){
+    cell.innerHTML = `<span class="meta">${summaryOf(v)}</span>`;
+    let nest = row.querySelector(".nest");
+    if (!nest){ nest = document.createElement("div"); nest.className = "nest"; row.appendChild(nest); }
+    nest.innerHTML = renderNode(k, v, k);
+    return;
+  }
+  row.querySelector(".nest")?.remove();
+  cell.innerHTML = formatScalar(k, v);
+}
+
+/* ---- Rendu lisible des objets / listes ---- */
+const openPaths = new Set(), closedPaths = new Set();
+const isObj = x => x !== null && typeof x === "object";
+const COLOR_KEY = /colou?r/i;
+function summaryOf(v){
+  if (Array.isArray(v)) return `${v.length} élément${v.length>1?"s":""}`;
+  const n = Object.keys(v).length; return `${n} champ${n>1?"s":""}`;
+}
+function countLeaves(v){ return isObj(v) ? Object.values(v).reduce((a,x)=>a+countLeaves(x),0) : 1; }
+function colorOf(o){
+  if (!isObj(o)) return null;
+  const k = Object.keys(o).find(k => COLOR_KEY.test(k) && typeof o[k] === "string");
+  return k ? toCss(o[k]) : null;
+}
+function toCss(s){
+  s = String(s).trim();
+  const m = /^#?0?([0-9a-f]{6})$/i.exec(s);          // "#RRGGBB", "0RRGGBB" ou "#0RRGGBB" (Creality)
+  if (m) return "#" + m[1];
+  return null;
+}
+function itemTitle(x, i){
+  if (!isObj(x) || Array.isArray(x)) return `#${i+1}`;
+  const c = colorOf(x);
+  const name = x.name ?? x.type ?? x.vendor ?? x.title ?? null;
+  const id = x.id ?? x.index ?? x.slot ?? null;
+  return `${c ? `<span class="swatch" style="background:${c}"></span>` : ""}<b>${esc(id !== null ? `#${id}` : `#${i+1}`)}</b>${name ? ` · ${esc(name)}` : ""}`;
+}
+function renderNode(key, v, path){
+  if (!isObj(v)) return formatScalar(key, v);
+  if (Array.isArray(v)){
+    if (!v.length) return `<div class="empty sm">liste vide</div>`;
+    // Pièces sur le plateau (exclude object) : on les dessine
+    if (v.every(x => isObj(x) && Array.isArray(x.polygon))) return renderPlate(v);
+    // Liste de points [x, y] : on résume au lieu de tout afficher
+    if (v.every(x => Array.isArray(x) && x.length <= 3 && x.every(n => typeof n === "number")))
+      return `<span class="meta">${v.length} points</span>`;
+    if (v.every(x => !isObj(x)))
+      return `<div class="chips">${v.map(x => `<span class="chip">${formatScalar(key, x)}</span>`).join("")}</div>`;
+    return `<div class="arr">${v.map((x,i) => block(itemTitle(x,i), x, `${path}/${i}`, key)).join("")}</div>`;
+  }
+  const keys = Object.keys(v);
+  if (!keys.length) return `<div class="empty sm">vide</div>`;
+  return `<div class="obj">${keys.map(k => isObj(v[k])
+      ? block(esc(labelOf(k)), v[k], `${path}/${k}`, k)
+      : `<div class="kv"><span class="k" title="${esc(k)}">${esc(labelOf(k))}</span><span class="v">${formatScalar(k, v[k])}</span></div>`
+    ).join("")}</div>`;
+}
+function block(title, v, path, key){
+  const open = openPaths.has(path) || (!closedPaths.has(path) && countLeaves(v) <= 14);
+  return `<details class="blk" data-path="${esc(path)}"${open ? " open" : ""}><summary>${title} <span class="meta">${summaryOf(v)}</span></summary>${renderNode(key, v, path)}</details>`;
+}
+document.addEventListener("toggle", e => {
+  const p = e.target.dataset && e.target.dataset.path; if (!p) return;
+  if (e.target.open){ openPaths.add(p); closedPaths.delete(p); } else { closedPaths.add(p); openPaths.delete(p); }
+}, true);
+
+/* ---- Plateau : dessine les pièces de l'impression ---- */
+const BED = 300; // K1 Max : 300 x 300 mm
+const cleanName = n => String(n ?? "").replace(/\.stl.*$/i, "").replace(/_ID_\d+.*$/i, "").replace(/_/g, " ");
+function renderPlate(list){
+  const cur = String(data.currentObject ?? data.current_object ?? data.curObject ?? "");
+  const excl = [].concat(data.excludedObjects ?? data.excluded_objects ?? []).map(String);
+  let size = BED;
+  list.forEach(o => o.polygon.forEach(p => { size = Math.max(size, p[0], p[1]); }));
+  const Y = y => size - y;
+  const shapes = list.map((o, i) => {
+    const hue = (i * 137.5) % 360;
+    const pts = o.polygon.map(p => `${(+p[0]).toFixed(2)},${Y(+p[1]).toFixed(2)}`).join(" ");
+    const c = o.center || o.polygon[0];
+    const isCur = cur && cur === o.name, isEx = excl.includes(o.name);
+    return `<g class="${isCur ? "cur" : ""}${isEx ? " ex" : ""}"><title>${esc(o.name)}</title>
+      <polygon points="${pts}" fill="hsl(${hue} 80% 60% / .28)" stroke="hsl(${hue} 85% 65%)" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
+      <text x="${c[0]}" y="${Y(c[1])}" class="pn">${i+1}</text></g>`;
+  }).join("");
+  const grid = Array.from({length: Math.floor(size/50)+1}, (_, i) => i*50)
+    .map(v => `<line x1="${v}" y1="0" x2="${v}" y2="${size}"/><line x1="0" y1="${v}" x2="${size}" y2="${v}"/>`).join("");
+  const legend = list.map((o, i) => {
+    const hue = (i * 137.5) % 360, isCur = cur && cur === o.name, isEx = excl.includes(o.name);
+    return `<div class="pl-item${isCur ? " cur" : ""}${isEx ? " ex" : ""}" title="${esc(o.name)}">
+      <i style="background:hsl(${hue} 85% 65%)"></i><b>${i+1}</b><span>${esc(cleanName(o.name))}</span>
+      ${isCur ? `<em>en cours</em>` : isEx ? `<em>exclue</em>` : ""}</div>`;
+  }).join("");
+  return `<div class="plate">
+    <svg viewBox="0 0 ${size} ${size}" preserveAspectRatio="xMidYMid meet">
+      <rect x="0" y="0" width="${size}" height="${size}" rx="6" class="bed"/>
+      <g class="grid">${grid}</g>${shapes}
+    </svg>
+    <div class="pl-list">${legend}</div>
+  </div>`;
+}
+
+/* ---- Slots du CFS : cherche tous les objets qui ont une couleur ---- */
+function findMaterials(v, out = [], trail = []){
+  if (Array.isArray(v)) v.forEach((x,i) => findMaterials(x, out, [...trail, i]));
+  else if (isObj(v)){
+    const c = colorOf(v);
+    if (c) out.push({c, o: v, trail});
+    else Object.entries(v).forEach(([k,x]) => findMaterials(x, out, [...trail, k]));
+  }
+  return out;
+}
+function renderSlots(){
+  const src = Object.keys(data).filter(k => isObj(data[k]) && /cfs|box|material|filament/i.test(k));
+  const mats = src.flatMap(k => findMaterials(data[k]));
+  let el = $("slots");
+  if (!mats.length){ el && el.remove(); return; }
+  if (!el){
+    const ce = ensureCat("cfs");
+    el = document.createElement("div"); el.id = "slots"; el.className = "slots";
+    ce.body.parentNode.insertBefore(el, ce.body);
+  }
+  el.innerHTML = mats.map((m, i) => {
+    const o = m.o;
+    const type = o.type ?? o.materialType ?? o.name ?? "";
+    const vendor = o.vendor ?? o.brand ?? "";
+    const pctKey = Object.keys(o).find(k => /percent|remain|left/i.test(k));
+    const pct = pctKey ? num(o[pctKey]) : null;
+    const id = o.id ?? o.index ?? i+1;
+    return `<div class="slot" title="${esc(JSON.stringify(o))}">
+      <div class="sw" style="background:${m.c}"></div>
+      <div class="si"><b>${esc(type || "Vide")}</b><span>${esc(vendor || `Slot ${id}`)}</span>
+      ${pct !== null ? `<div class="sbar"><div style="width:${Math.max(0,Math.min(100,pct))}%"></div></div>` : ""}</div>
+    </div>`;
+  }).join("");
+}
+
+function formatScalar(k, v){
+  if (v === "" || v === null || v === undefined) return `<span class="empty">vide</span>`;
+  const n = num(v), raw = `<span class="raw">${esc(v)}</span>`;
+  const showRawToo = s => `${s}${raw}`;
+  if (typeof v === "boolean") return v ? `<span class="pill yes">Oui</span>` : `<span class="pill no">Non</span>`;
+  // Booléens 0/1
+  if ((n === 0 || n === 1) && /Sw$|switch|enable|detect|connect|support|^with|autohome|status$/i.test(k) && !/temp/i.test(k))
+    return n ? `<span class="pill yes">Oui</span>` : `<span class="pill no">Non</span>`;
+  if (n !== null){
+    if (/temp/i.test(k)) return `${n.toFixed(1)} °C`;
+    if (/progress|pct$|percent/i.test(k)) return `${n} %`;
+    if (/StartTime|timestamp/i.test(k) && n > 1e9) return showRawToo(new Date((n > 1e12 ? n : n*1000)).toLocaleString("fr-CA"));
+    if (/speed/i.test(k)) return `${n} mm/s`;
+    if (/realTimeFlow/i.test(k)) return `${n} mm³/s`;
+    if (/time/i.test(k) && !/realTime/i.test(k) && n >= 0 && n < 1e7) return showRawToo(fmtDur(n));
+    if (/length/i.test(k)) return n >= 1000 ? showRawToo(`${(n/1000).toFixed(2)} m`) : `${n} mm`;
+    if (/fan/i.test(k) && n > 1 && n <= 255) return showRawToo(`${Math.round(n/255*100)} %`);
+    if (k === "state") return showRawToo((STATES[n]||[`Code ${n}`])[0]);
+    return esc(v);
+  }
+  if (typeof v === "string"){
+    if (COLOR_KEY.test(k) && toCss(v)) { const c = toCss(v); return `<span class="swatch" style="background:${c}"></span>${esc(c)}`; }
+    if (/^\/usr\/data\//.test(v)) return `<span title="${esc(v)}">${esc(v.split("/").pop())}</span>`;
+  }
+  return esc(v);
+}
+
+/* ================= Recherche / filtres ================= */
+function applyFilter(r){
+  const q = $("search").value.trim().toLowerCase();
+  const onlyChanged = $("onlyChanged").checked;
+  const hay = r.el.dataset.search + " " + r.el.querySelector(".val").textContent.toLowerCase();
+  const show = (!q || q.split(/\s+/).some(w => hay.includes(w)))   // plusieurs mots = l'un OU l'autre
+            && (!onlyChanged || r.lastChange > 0);
+  r.el.classList.toggle("hide", !show);
+}
+function applyAll(){ Object.values(rows).forEach(applyFilter); updateCounts(); }
+function updateCounts(){
+  const total = Object.keys(rows).length;
+  let visible = 0;
+  for (const id in catEls){
+    const vis = catEls[id].body.querySelectorAll(".row:not(.hide)").length;
+    catEls[id].n.textContent = vis;
+    catEls[id].card.classList.toggle("hide", vis === 0);
+    visible += vis;
+  }
+  $("nKeys").textContent = visible === total ? `${total} champs` : `${visible} / ${total} champs`;
+}
+$("search").addEventListener("input", applyAll);
+$("onlyChanged").addEventListener("change", applyAll);
+$("showRaw").addEventListener("change", e => document.body.classList.toggle("rawkeys", e.target.checked));
+document.head.insertAdjacentHTML("beforeend", `<style>.row .key{display:none} body.rawkeys .row .key{display:block}</style>`);
+$("copyBtn").onclick = async () => {
+  const txt = JSON.stringify(data, null, 2);
+  try { await navigator.clipboard.writeText(txt); toast("JSON copié"); }
+  catch(e){ const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); toast("JSON copié"); }
+};
+
+/* ================= Graphique ================= */
+setInterval(() => {
+  if (!ws || ws.readyState !== 1) return;
+  const now = Date.now();
+  hist.push({t:now, n:num(data.nozzleTemp), b:num(data.bedTemp0), c:num(data.boxTemp)});
+  while (hist.length && hist[0].t < now - HIST_MS) hist.shift();
+  drawChart();
+}, 1000);
+
+function drawChart(){
+  const cv = $("chart"), dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight;
+  cv.width = W*dpr; cv.height = H*dpr;
+  const g = cv.getContext("2d"); g.scale(dpr,dpr); g.clearRect(0,0,W,H);
+  const cs = getComputedStyle(document.documentElement);
+  const vals = hist.flatMap(h => [h.n,h.b,h.c]).filter(v => v!==null);
+  const max = Math.max(60, ...vals) * 1.08, now = Date.now(), padL = 34;
+  g.font = "11px " + cs.getPropertyValue("--mono"); g.fillStyle = cs.getPropertyValue("--muted"); g.strokeStyle = cs.getPropertyValue("--line"); g.lineWidth = 1;
+  for (let i=0;i<=4;i++){ const y = H - (H-8)*i/4 - 4; g.beginPath(); g.moveTo(padL,y); g.lineTo(W,y); g.stroke(); g.fillText(Math.round(max*i/4)+"°", 0, y+4); }
+  const X = t => padL + (W-padL) * (1 - (now - t)/HIST_MS);
+  const Y = v => H - 4 - (H-8) * v/max;
+  for (const [key,col] of [["c","--box"],["b","--bed"],["n","--nozzle"]]){
+    g.strokeStyle = cs.getPropertyValue(col); g.lineWidth = 2; g.beginPath(); let started = false;
+    for (const h of hist){ if (h[key]===null) continue; const x = X(h.t), y = Y(h[key]); started ? g.lineTo(x,y) : (g.moveTo(x,y), started = true); }
+    g.stroke();
+  }
+}
+window.addEventListener("resize", drawChart);
+
+/* ================= Carte Plateau interactive ================= */
+const P = { vb:{x:-8,y:-8,w:316,h:316}, mode:"objs", list:[], trail:[], hover:-1, fitted:false };
+const SVGNS = "http://www.w3.org/2000/svg";
+const sy = y => BED - y;                       // mm → coordonnées SVG (Y inversé)
+const pSvg = $("plateSvg");
+
+function plateList(){
+  const o = data.objects;
+  return Array.isArray(o) ? o.filter(x => isObj(x) && Array.isArray(x.polygon) && x.polygon.length) : [];
+}
+function objBox(o){
+  const xs = o.polygon.map(p => +p[0]), ys = o.polygon.map(p => +p[1]);
+  const b = {x0:Math.min(...xs), x1:Math.max(...xs), y0:Math.min(...ys), y1:Math.max(...ys)};
+  b.w = b.x1 - b.x0; b.h = b.y1 - b.y0; return b;
+}
+const fmtMm = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
+
+function plateFit(mode, box){
+  P.mode = mode || P.mode;
+  document.querySelectorAll("[data-fit]").forEach(b => b.classList.toggle("on", b.dataset.fit === P.mode && !box));
+  let b = box;
+  if (!b && P.mode === "objs" && P.list.length){
+    const bs = P.list.map(objBox);
+    b = {x0:Math.min(...bs.map(x=>x.x0)), x1:Math.max(...bs.map(x=>x.x1)), y0:Math.min(...bs.map(x=>x.y0)), y1:Math.max(...bs.map(x=>x.y1))};
+  }
+  if (b){
+    const s = Math.max(b.x1 - b.x0, b.y1 - b.y0), pad = Math.max(8, s * 0.18), S = s + pad*2;
+    const cx = (b.x0 + b.x1)/2, cy = sy((b.y0 + b.y1)/2);
+    P.vb = {x:cx - S/2, y:cy - S/2, w:S, h:S};
+  } else P.vb = {x:-20, y:-10, w:340, h:340};
+  plateDraw();
+}
+
+function el(tag, attrs, parent){ const e = document.createElementNS(SVGNS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent && parent.appendChild(e); return e; }
+
+function plateDraw(){
+  // Zone visible = la vue demandée, élargie aux proportions réelles du cadre (grille et graduations partout)
+  const R = pSvg.getBoundingClientRect(), asp = R.width && R.height ? R.width / R.height : 1;
+  const vb = {...P.vb};
+  if (asp > 1){ const w = vb.h * asp; vb.x -= (w - vb.w) / 2; vb.w = w; }
+  else if (asp < 1){ const h = vb.w / asp; vb.y -= (h - vb.h) / 2; vb.h = h; }
+  P.view = vb;
+  const fs = Math.min(vb.w, vb.h) / 300 * 11;      // taille de texte constante à l'écran
+  pSvg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
+
+  // Grille : pas adapté au zoom
+  const step = [1,2,5,10,20,25,50].find(s => vb.w / s <= 14) || 50;
+  const major = step * 5;
+  const G = $("pGrid"), L = $("pLabels"); G.innerHTML = ""; L.innerHTML = "";
+  const x0 = Math.max(0, Math.floor(vb.x/step)*step), x1 = Math.min(BED, vb.x + vb.w);
+  for (let x = x0; x <= x1; x += step) el("line", {x1:x, y1:0, x2:x, y2:BED, class: x % major === 0 ? "mj" : ""}, G);
+  const yTop = Math.max(0, vb.y), yBot = Math.min(BED, vb.y + vb.h);
+  for (let mm = Math.floor(sy(yBot)/step)*step; mm <= sy(yTop); mm += step){
+    if (mm < 0 || mm > BED) continue;
+    el("line", {x1:0, y1:sy(mm), x2:BED, y2:sy(mm), class: mm % major === 0 ? "mj" : ""}, G);
+  }
+  // Graduations (en haut et à gauche de la vue)
+  const lblStep = step * (vb.w / step > 8 ? 2 : 1);
+  for (let x = Math.ceil(Math.max(0, vb.x + fs*2)/lblStep)*lblStep; x <= x1; x += lblStep)
+    el("text", {x, y: vb.y + fs*1.2, "font-size": fs*0.9, "text-anchor":"middle"}, L).textContent = x;
+  for (let mm = Math.ceil(sy(Math.min(BED, vb.y + vb.h - fs))/lblStep)*lblStep; mm <= sy(Math.max(0, vb.y + fs*2)); mm += lblStep)
+    if (mm >= 0 && mm <= BED) el("text", {x: vb.x + fs*0.4, y: sy(mm) + fs*0.3, "font-size": fs*0.9}, L).textContent = mm;
+
+  // Repère d'orientation : origine (0,0) = coin avant-gauche de la K1 Max, avant = bas de la vue
+  const cm = Math.min(14, vb.w * 0.06);
+  el("path", {d:`M0 ${BED - cm}L0 ${BED}L${cm} ${BED}`, class:"corner"}, L);
+  el("circle", {cx:0, cy:BED, r:fs*0.35, class:"cornerdot"}, L);
+  el("text", {x: fs*0.5, y: BED - fs*0.6, "font-size": fs*0.85, class:"cornertxt"}, L).textContent = "avant-gauche";
+  el("text", {x: BED/2, y: BED + fs*1.3, "font-size": fs, "text-anchor":"middle", class:"fronttxt"}, L).textContent = "▼ AVANT (porte) ▼";
+
+  // Pièces
+  const cur = String(data.currentObject ?? data.current_object ?? data.curObject ?? "");
+  const excl = [].concat(data.excludedObjects ?? data.excluded_objects ?? []).map(String);
+  const O = $("pObjs"); O.innerHTML = "";
+  P.list.forEach((o, i) => {
+    const hue = (i * 137.5) % 360, b = objBox(o);
+    const g = el("g", {"data-i": i, class: [cur === o.name ? "cur" : "", excl.includes(o.name) ? "ex" : "", P.hover === i ? "hl" : ""].join(" ")}, O);
+    el("polygon", {points: o.polygon.map(p => `${+p[0]},${sy(+p[1])}`).join(" "),
+      fill:`hsl(${hue} 80% 60%)`, "fill-opacity":.28, stroke:`hsl(${hue} 85% 65%)`}, g);
+    const c = o.center || [(b.x0+b.x1)/2, (b.y0+b.y1)/2];
+    const big = Math.min(b.w, b.h) > fs * 3.2;     // assez de place pour écrire les dimensions ?
+    el("text", {x:c[0], y: sy(c[1]) - (big ? fs*0.55 : 0), "font-size": fs*1.1, "stroke-width": fs*0.25}, g).textContent = i+1;
+    if (big) el("text", {x:c[0], y: sy(c[1]) + fs*0.65, "font-size": fs*0.8, "stroke-width": fs*0.2, class:"dim"}, g).textContent = `${fmtMm(b.w)}×${fmtMm(b.h)}`;
+  });
+  $("pempty").style.display = (P.list.length || G.layers) ? "none" : "flex";
+  drawGcode();
+  plateNozzle(true);
+}
+
+function plateNozzle(redrawOnly){
+  const m = /X:\s*(-?[\d.]+)\s*Y:\s*(-?[\d.]+)(?:\s*Z:\s*(-?[\d.]+))?/i.exec(String(data.curPosition || ""));
+  const N = $("pNoz"); N.innerHTML = "";
+  if (!m){ $("pinfo").innerHTML = `zoom ×${(316/P.vb.w).toFixed(1)}`; return; }
+  const x = +m[1], y = +m[2], z = m[3];
+  if (!redrawOnly){
+    // La buse imprime-t-elle ? Avec le G-code : est-elle SUR une ligne d'extrusion de la couche ?
+    // Sans G-code : on se rabat sur le débit envoyé par l'imprimante (moins fiable, il est lissé).
+    let ext;
+    const loc = gLocate(x, y);
+    if (loc) ext = loc.dist <= 0.8;
+    else { const flow = num(data.realTimeFlow); ext = num(data.state) === 1 && flow !== null && flow > 0.05; }
+    const last = P.trail[P.trail.length-1];
+    if (!last || Math.hypot(last[0]-x, last[1]-y) > 0.2) P.trail.push([x, y, ext]);
+    if (P.trail.length > 800) P.trail.shift();
+    if (loc) drawGcode();
+  }
+  const r = P.vb.w / 300 * 4;
+  // Positions reçues = des POINTS (environ 1/s) : relier deux points par une ligne inventerait un trajet
+  let dP = "", dT = "", dL = "";
+  if ($("trailChk").checked) P.trail.forEach((p, i) => {
+    const pt = `M${p[0]} ${sy(p[1])}h0`;
+    dP += pt;                       // une seule couleur : on ne devine plus extrusion / déplacement
+    dL += (i ? "L" : "M") + `${p[0]} ${sy(p[1])}`;
+  });
+  $("pTrailP").setAttribute("d", dP); $("pTrailT").setAttribute("d", dT); $("pTrailL").setAttribute("d", $("trailLines").checked ? dL : "");
+  const V = P.view || P.vb;
+  el("line", {x1:x, y1:V.y, x2:x, y2:V.y+V.h}, N);
+  el("line", {x1:V.x, y1:sy(y), x2:V.x+V.w, y2:sy(y)}, N);
+  el("circle", {cx:x, cy:sy(y), r}, N);
+  $("pinfo").innerHTML = `<b>●</b> X ${x.toFixed(1)}  Y ${y.toFixed(1)}${z ? `  Z ${(+z).toFixed(2)}` : ""}  ·  zoom ×${(316/P.vb.w).toFixed(1)}`;
+}
+
+function plateObjectsChanged(){
+  const before = P.list.length;
+  P.list = plateList();
+  if (!P.fitted && P.list.length){ P.fitted = true; plateFit("objs"); }
+  else if (before !== P.list.length && P.mode === "objs") plateFit("objs");
+  else plateDraw();
+  plateRenderList();
+}
+
+function plateRenderList(){
+  const cur = String(data.currentObject ?? data.current_object ?? data.curObject ?? "");
+  const excl = [].concat(data.excludedObjects ?? data.excluded_objects ?? []).map(String);
+  $("plateList").innerHTML = P.list.map((o, i) => {
+    const hue = (i * 137.5) % 360, b = objBox(o), isCur = cur === o.name, isEx = excl.includes(o.name);
+    return `<div class="pl-item${isCur?" cur":""}${isEx?" ex":""}${P.hover===i?" hl":""}" data-i="${i}" title="${esc(o.name)}">
+      <i style="background:hsl(${hue} 85% 65%)"></i><b>${i+1}</b><span>${esc(cleanName(o.name))}</span>
+      <span class="dimtxt">${fmtMm(b.w)} × ${fmtMm(b.h)} mm</span>${isCur ? `<em>en cours</em>` : isEx ? `<em>exclue</em>` : ""}${printingNow() && !isEx ? `<button class="exb" data-i="${i}" title="Ne plus imprimer cette pièce">Exclure</button>` : ""}</div>`;
+  }).join("");
+}
+
+function plateHover(i, ev){
+  if (P.hover !== i){
+    P.hover = i;
+    document.querySelectorAll("#pObjs g").forEach(g => g.classList.toggle("hl", +g.dataset.i === i));
+    document.querySelectorAll("#plateList .pl-item").forEach(g => g.classList.toggle("hl", +g.dataset.i === i));
+  }
+  const tip = $("ptip");
+  if (i < 0 || !ev){ tip.style.display = "none"; return; }
+  const o = P.list[i], b = objBox(o), c = o.center || [(b.x0+b.x1)/2, (b.y0+b.y1)/2];
+  tip.innerHTML = `<b>${i+1} · ${esc(cleanName(o.name))}</b><span>${fmtMm(b.w)} × ${fmtMm(b.h)} mm · centre ${(+c[0]).toFixed(1)}, ${(+c[1]).toFixed(1)}</span>`;
+  const r = pSvg.parentNode.getBoundingClientRect();
+  let lx = ev.clientX - r.left + 14, ly = ev.clientY - r.top + 14;
+  tip.style.display = "block";
+  if (lx + tip.offsetWidth > r.width - 4) lx = ev.clientX - r.left - tip.offsetWidth - 10;
+  if (ly + tip.offsetHeight > r.height - 4) ly = ev.clientY - r.top - tip.offsetHeight - 10;
+  tip.style.left = lx + "px"; tip.style.top = ly + "px";
+}
+
+// Interactions : zoom molette, glisser, double-clic, survol
+// Le dessin garde ses proportions (« meet ») : on tient compte de l'échelle réelle et du centrage
+const svgScale = () => { const r = pSvg.getBoundingClientRect(); const k = Math.min(r.width / P.vb.w, r.height / P.vb.h) || 1; return {r, k, ox: (r.width - P.vb.w*k)/2, oy: (r.height - P.vb.h*k)/2}; };
+const toSvg = (cx, cy) => { const {r, k, ox, oy} = svgScale(); return {x: P.vb.x + (cx - r.left - ox)/k, y: P.vb.y + (cy - r.top - oy)/k}; };
+pSvg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const f = Math.exp(e.deltaY * 0.0015), pt = toSvg(e.clientX, e.clientY);
+  const w = Math.min(420, Math.max(4, P.vb.w * f)), k = w / P.vb.w;
+  P.vb = {x: pt.x - (pt.x - P.vb.x)*k, y: pt.y - (pt.y - P.vb.y)*k, w, h: w};
+  document.querySelectorAll("[data-fit]").forEach(b => b.classList.remove("on"));
+  plateDraw();
+}, {passive:false});
+let drag = null;
+pSvg.addEventListener("pointerdown", e => { drag = {x:e.clientX, y:e.clientY, vb:{...P.vb}, moved:false}; pSvg.setPointerCapture(e.pointerId); });
+pSvg.addEventListener("pointermove", e => {
+  if (drag){
+    const {k} = svgScale(), dx = (e.clientX - drag.x)/k, dy = (e.clientY - drag.y)/k;
+    if (Math.abs(dx) + Math.abs(dy) > 0.01) drag.moved = true;
+    if (drag.moved){ pSvg.classList.add("drag"); P.vb = {...drag.vb, x: drag.vb.x - dx, y: drag.vb.y - dy}; plateDraw(); plateHover(-1); return; }
+  }
+  const g = e.target.closest && e.target.closest("#pObjs g");
+  plateHover(g ? +g.dataset.i : -1, e);
+});
+const endDrag = () => { if (drag && drag.moved) document.querySelectorAll("[data-fit]").forEach(b => b.classList.remove("on")); drag = null; pSvg.classList.remove("drag"); };
+pSvg.addEventListener("pointerup", endDrag);
+pSvg.addEventListener("pointercancel", endDrag);
+pSvg.addEventListener("pointerleave", () => plateHover(-1));
+pSvg.addEventListener("dblclick", () => plateFit());
+document.querySelectorAll("[data-fit]").forEach(b => b.onclick = () => plateFit(b.dataset.fit));
+$("trailChk").addEventListener("change", () => plateNozzle(true));
+$("trailLines").addEventListener("change", () => plateNozzle(true));
+$("plateList").addEventListener("mouseover", e => { const it = e.target.closest(".pl-item"); plateHover(it ? +it.dataset.i : -1); });
+$("plateList").addEventListener("mouseleave", () => plateHover(-1));
+$("plateList").addEventListener("click", e => { const it = e.target.closest(".pl-item"); if (it) plateFit(P.mode, objBox(P.list[+it.dataset.i])); });
+
+/* ================= G-code : vraies formes des pièces ================= */
+// Le fichier est lu dans un « worker » pour ne pas geler la page, même avec un gros G-code.
+const G = { layers:null, names:[], file:"", layer:1 };
+const GTYPE = {outer:0, inner:1, other:2, skirt:3};
+const workerSrc = `
+self.onmessage = async (ev) => {
+  const file = ev.data;
+  const reader = file.stream().getReader(), dec = new TextDecoder();
+  let carry = "", read = 0;
+  let absPos = true, absE = true, x = 0, y = 0, z = 0, e = 0;
+  let type = 2, obj = -1, hasLayerTags = false;
+  const names = [], nameIdx = {};
+  const layers = []; let L = null;
+  const newLayer = (zz) => { L = {z: zz, s: [], t: [], o: []}; layers.push(L); };
+  const typeOf = s => { s = s.toLowerCase();
+    if (/outer wall|external perimeter|outer_wall/.test(s)) return 0;
+    if (/inner wall|perimeter|wall/.test(s)) return 1;
+    if (/skirt|brim/.test(s)) return 3;
+    return 2; };
+  const objOf = n => { n = n.trim(); if (!(n in nameIdx)){ nameIdx[n] = names.length; names.push(n); } return nameIdx[n]; };
+  const line = (ln) => {
+    const sc = ln.indexOf(";");
+    if (sc >= 0){
+      const c = ln.slice(sc + 1).trim();
+      if (c === "LAYER_CHANGE"){ hasLayerTags = true; newLayer(z); }
+      else if (c.startsWith("Z:") && L) L.z = parseFloat(c.slice(2));
+      else if (c.startsWith("TYPE:")) type = typeOf(c.slice(5));
+      else if (c.startsWith("printing object ")) obj = objOf(c.slice(16));
+      else if (c.startsWith("stop printing object")) obj = -1;
+      ln = ln.slice(0, sc);
+    }
+    ln = ln.trim(); if (!ln) return;
+    const up = ln.toUpperCase();
+    if (up.startsWith("EXCLUDE_OBJECT_START")){ const m = /NAME=("?)([^"\\s]+)\\1/i.exec(ln); if (m) obj = objOf(m[2]); return; }
+    if (up.startsWith("EXCLUDE_OBJECT_END")){ obj = -1; return; }
+    const cmd = up.split(/\\s+/)[0];
+    if (cmd === "G90"){ absPos = true; return; } if (cmd === "G91"){ absPos = false; return; }
+    if (cmd === "M82"){ absE = true; return; }   if (cmd === "M83"){ absE = false; return; }
+    if (cmd === "G92"){ const m = /E(-?[\\d.]+)/i.exec(up); if (m) e = parseFloat(m[1]); return; }
+    if (cmd !== "G0" && cmd !== "G1" && cmd !== "G2" && cmd !== "G3") return;
+    let nx = x, ny = y, nz = z, de = 0, m;
+    const re = /([XYZE])(-?[\\d.]+)/g;
+    while ((m = re.exec(up))){
+      const v = parseFloat(m[2]);
+      if (m[1] === "X") nx = absPos ? v : x + v;
+      else if (m[1] === "Y") ny = absPos ? v : y + v;
+      else if (m[1] === "Z") nz = absPos ? v : z + v;
+      else { if (absE){ de = v - e; e = v; } else de = v; }
+    }
+    if (nz !== z){ z = nz; if (!hasLayerTags && (!L || z > L.z + 1e-4) ) { /* couche créée à la 1re extrusion */ } }
+    if (de > 0 && (nx !== x || ny !== y)){
+      if (!L || (!hasLayerTags && z > L.z + 1e-4)) newLayer(z);
+      L.s.push(x, y, nx, ny); L.t.push(type); L.o.push(obj);
+    }
+    x = nx; y = ny;
+  };
+  for (;;){
+    const {done, value} = await reader.read();
+    if (done) break;
+    read += value.length;
+    const txt = carry + dec.decode(value, {stream: true});
+    const parts = txt.split("\\n"); carry = parts.pop();
+    for (const p of parts) line(p);
+    self.postMessage({progress: read / file.size});
+  }
+  if (carry) line(carry);
+  const out = layers.filter(l => l.s.length).map(l => ({z: l.z, s: new Float32Array(l.s), t: new Uint8Array(l.t), o: new Int16Array(l.o)}));
+  const tr = []; out.forEach(l => tr.push(l.s.buffer, l.t.buffer, l.o.buffer));
+  self.postMessage({done: true, layers: out, names}, tr);
+};`;
+let gWorker = null;
+function loadGcode(file){
+  if (!file) return;
+  if (gWorker) gWorker.terminate();
+  gWorker = new Worker(URL.createObjectURL(new Blob([workerSrc], {type:"text/javascript"})));
+  $("gStat").className = "gstat"; $("gStat").textContent = `Lecture de ${file.name}… 0 %`;
+  gWorker.onmessage = ev => {
+    const d = ev.data;
+    if (d.progress !== undefined){ $("gStat").textContent = `Lecture de ${file.name}… ${Math.round(d.progress*100)} %`; return; }
+    G.layers = d.layers; G.names = d.names; G.file = file.name;
+    const segs = d.layers.reduce((a, l) => a + l.t.length, 0);
+    document.body.classList.add("hasG");
+    $("gLayerRow").classList.remove("hide");
+    $("gSlider").max = d.layers.length;
+    gCheckName();
+    if (!d.layers.length){ $("gStat").className = "gstat warn"; $("gStat").textContent = "Aucune extrusion trouvée dans ce fichier"; return; }
+    $("gStat").title = `${d.layers.length} couches · ${segs.toLocaleString("fr-CA")} segments · ${d.names.length} pièce(s)`;
+    gMaxZ = 0;
+    gSetLayer(($("gFollow").checked && gRealLayer()) || Math.min(G.layer, d.layers.length));
+    renderMain();
+    gWorker.terminate(); gWorker = null;
+  };
+  gWorker.onerror = e => { $("gStat").className = "gstat warn"; $("gStat").textContent = "Erreur de lecture : " + e.message; };
+  gWorker.postMessage(file);
+}
+function gCheckName(){
+  if (!G.layers) return;
+  const base = s => String(s || "").split(/[\\/]/).pop().toLowerCase();
+  const printing = base(data.printFileName);
+  const info = `${G.file} · ${G.layers.length} couches · ${G.names.length || "?"} pièce(s)`;
+  if (printing && printing !== base(G.file)){
+    $("gStat").className = "gstat warn";
+    $("gStat").textContent = `⚠ ${G.file} ≠ fichier en impression (${base(data.printFileName)})`;
+  } else { $("gStat").className = "gstat"; $("gStat").textContent = info; }
+}
+// Vraie couche = dernière couche du G-code dont la hauteur est ≤ Z actuel de la buse
+// (on retient la plus haute valeur vue pour ignorer les petits « z-hop » et les retours à la purge)
+let gMaxZ = 0;
+function gRealLayer(){
+  if (!G.layers || !G.layers.length) return null;
+  const m = /Z:\s*(-?[\d.]+)/i.exec(String(data.curPosition || ""));
+  if (!m || num(data.state) !== 1) return null;
+  const z = +m[1];
+  if (z < gMaxZ - 1) gMaxZ = 0;                 // nouvelle impression
+  if (z <= G.layers[G.layers.length-1].z + 2) gMaxZ = Math.max(gMaxZ, z);
+  let lo = 0, hi = G.layers.length - 1, best = 0;
+  while (lo <= hi){ const mid = (lo + hi) >> 1; if (G.layers[mid].z <= gMaxZ + 0.02){ best = mid; lo = mid + 1; } else hi = mid - 1; }
+  return best + 1;
+}
+function gSetLayer(n){
+  if (!G.layers || !n) return;
+  G.layer = Math.max(1, Math.min(G.layers.length, Math.round(n)));
+  $("gSlider").value = G.layer;
+  const l = G.layers[G.layer - 1];
+  $("gLayerTxt").textContent = `Couche ${G.layer} / ${G.layers.length} · Z ${l.z.toFixed(2)}`;
+  drawGcode();
+}
+
+// Couleur d'un segment = couleur de la pièce du plateau qui porte le même nom
+function gHue(oi){
+  if (oi < 0) return null;
+  const n = G.names[oi]; const i = P.list.findIndex(o => o.name === n);
+  return ((i >= 0 ? i : oi) * 137.5) % 360;
+}
+function pathOf(s, idx){
+  // Relie les segments qui se suivent pour un tracé plus léger
+  let d = "", lx = NaN, ly = NaN;
+  for (const i of idx){
+    const x1 = s[i*4], y1 = sy(s[i*4+1]), x2 = s[i*4+2], y2 = sy(s[i*4+3]);
+    if (!(Math.abs(x1 - lx) <= 1e-3 && Math.abs(y1 - ly) <= 1e-3)) d +=`M${x1.toFixed(2)} ${y1.toFixed(2)}`;
+    d += `L${x2.toFixed(2)} ${y2.toFixed(2)}`; lx = x2; ly = y2;
+  }
+  return d;
+}
+/* ---- Où en est la buse DANS le G-code ? ----
+   On cherche la ligne d'extrusion de la couche en cours la plus proche de la position reçue.
+   Le G-code s'imprime dans l'ordre, donc on cherche d'abord vers l'avant du dernier point trouvé. */
+G.prog = {layer: 0, idx: -1};
+function segDist(s, i, x, y){
+  const ax = s[i*4], ay = s[i*4+1], bx = s[i*4+2], by = s[i*4+3];
+  const dx = bx - ax, dy = by - ay, L2 = dx*dx + dy*dy;
+  let t = L2 ? ((x - ax)*dx + (y - ay)*dy) / L2 : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(ax + t*dx - x, ay + t*dy - y);
+}
+function gLocate(x, y){
+  if (!G.layers) return null;
+  const L = gRealLayer(); if (!L) return null;
+  const l = G.layers[L - 1], n = l.t.length; if (!n) return null;
+  if (G.prog.layer !== L) G.prog = {layer: L, idx: -1};
+  const best = (from, to) => { let bi = -1, bd = Infinity; for (let i = from; i < to; i++){ const d = segDist(l.s, i, x, y); if (d < bd){ bd = d; bi = i; } } return {i: bi, d: bd}; };
+  let r = best(Math.max(0, G.prog.idx - 40), n);          // vers l'avant (+ petite marge)
+  if (r.d > 0.8) { const g = best(0, n); if (g.d < r.d - 0.3) r = g; }   // re-synchronisation
+  if (r.d <= 0.8 && r.i >= 0) G.prog.idx = Math.max(G.prog.idx, r.i);
+  return {dist: r.d, idx: r.i};
+}
+
+function drawGcode(){
+  const Gg = $("pGcode"), Gh = $("pGhost"); Gg.innerHTML = ""; Gh.innerHTML = "";
+  document.querySelectorAll(".gonly").forEach(e => e.classList.toggle("hide", !G.layers));
+  if (!G.layers || !G.layers.length) return;
+  const l = G.layers[G.layer - 1], view = $("gView").value;
+  // Avancement : couche en cours → fait jusqu'à G.prog.idx ; couches au-dessus → tout « à venir »
+  const cur = gRealLayer();
+  const doneUpTo = !cur ? Infinity : G.layer < cur ? Infinity : G.layer > cur ? -1 : (G.prog.layer === cur ? G.prog.idx : -1);
+  // Fantôme : contour extérieur de la première couche (l'empreinte au sol)
+  const first = G.layers[0], fi = [];
+  for (let i = 0; i < first.t.length; i++) if (first.t[i] === 0) fi.push(i);
+  if (G.layer > 1 && fi.length) el("path", {d: pathOf(first.s, fi)}, Gh);
+  // Couche affichée, groupée par (pièce, type)
+  const groups = new Map();
+  for (let i = 0; i < l.t.length; i++){
+    const t = l.t[i];
+    if (view === "outer" && t !== 0) continue;
+    if (view === "walls" && t > 1) continue;
+    const k = l.o[i] + ":" + t + ":" + (i <= doneUpTo ? 1 : 0);
+    (groups.get(k) || groups.set(k, []).get(k)).push(i);
+  }
+  // à venir d'abord (en dessous), puis fait ; murs extérieurs en dernier
+  const order = [...groups.keys()].sort((a, b) => { const A = a.split(":").map(Number), B = b.split(":").map(Number); return (A[2] - B[2]) || (B[1] - A[1]); });
+  for (const k of order){
+    const [oi, t, done] = k.split(":").map(Number), h = gHue(oi);
+    const col = h === null ? "hsl(0 0% 75%)" : `hsl(${h} 85% ${t === 0 ? 66 : t === 1 ? 52 : 45}%)`;
+    const op = (t === 0 ? 1 : t === 1 ? .75 : .4) * (done ? 1 : .2);
+    el("path", {d: pathOf(l.s, groups.get(k)), stroke: col,
+      "stroke-width": t === 0 ? 1.8 : t === 1 ? 1.1 : .7, "stroke-opacity": op}, Gg);
+  }
+}
+$("gLoad").onclick = () => $("gFile").click();
+$("gFile").onchange = e => loadGcode(e.target.files[0]);
+const pw = pSvg.parentNode;
+pw.addEventListener("dragover", e => { e.preventDefault(); pw.classList.add("drop"); });
+pw.addEventListener("dragleave", () => pw.classList.remove("drop"));
+pw.addEventListener("drop", e => { e.preventDefault(); pw.classList.remove("drop"); loadGcode(e.dataTransfer.files[0]); });
+$("gSlider").addEventListener("input", e => { $("gFollow").checked = false; gSetLayer(+e.target.value); });
+$("gPrev").onclick = () => { $("gFollow").checked = false; gSetLayer(G.layer - 1); };
+$("gNext").onclick = () => { $("gFollow").checked = false; gSetLayer(G.layer + 1); };
+$("gFollow").addEventListener("change", e => { if (e.target.checked){ const rl = gRealLayer(); if (rl) gSetLayer(rl); } });
+$("gView").addEventListener("change", drawGcode);
+
+/* ================= Sécurité ================= */
+// Commandes envoyées à l'imprimante (websocket Creality, firmware stock)
+const CMD = {
+  stop:    {method:"set", params:{stop:1}},
+  nozOff:  {method:"set", params:{nozzleTempControl:0}},
+  bedOff:  {method:"set", params:{bedTempControl:{num:0, val:0}}},
+  gcodeOff:{method:"set", params:{gcodeCmd:"M104 S0\nM140 S0"}},
+};
+let lastData = 0;
+const S = { over:{noz:0, bed:0}, triggered:false, alarm:false, lostAlerted:false, lastResend:0 };
+const SKEYS = ["sArm","sNoz","sBed","sDur","sStop","sHeat","sSound","sLost"];
+const sv = id => { const e = $(id); return e.type === "checkbox" ? e.checked : num(e.value); };
+
+function sLog(msg, bad){
+  const d = document.createElement("div");
+  d.className = bad ? "bad" : "";
+  d.textContent = `${new Date().toLocaleTimeString("fr-CA")}  ${msg}`;
+  $("sLog").prepend(d);
+  while ($("sLog").children.length > 50) $("sLog").lastChild.remove();
+}
+function send(obj){
+  if (ws && ws.readyState === 1){ ws.send(JSON.stringify(obj)); return true; }
+  return false;
+}
+function setStat(cls, txt){
+  const e = $("sStat"); e.className = "sstat " + cls; e.textContent = txt;
+  // Petit indicateur dans l'en-tête
+  const pill = $("safePill"); pill.className = "safepill " + cls; pill.title = txt + " — cliquer pour les réglages";
+  const tn = num(data.nozzleTemp);
+  pill.textContent = cls === "alarm" ? "🛡 ALERTE" : cls === "warn" ? "🛡 Attention" : cls === "off" ? "🛡 Désactivée"
+    : (tn !== null ? `🛡 Active · ${tn.toFixed(0)}/${sv("sNoz") || 300}°` : "🛡 Active");
+}
+
+function safetyCheck(){
+  if (!sv("sArm")){ setStat("off", "Surveillance désactivée"); return; }
+  const now = Date.now(), dur = (sv("sDur") || 5) * 1000;
+  const tn = num(data.nozzleTemp), tb = num(data.bedTemp0);
+  const limN = sv("sNoz") || 300, limB = sv("sBed") || 110;
+  const checks = [["noz", "Buse", tn, limN], ["bed", "Plateau", tb, limB]];
+  let warn = null;
+  for (const [k, name, t, lim] of checks){
+    if (t !== null && t >= lim){
+      if (!S.over[k]){ S.over[k] = now; sLog(`${name} à ${t.toFixed(1)} °C ≥ ${lim} °C — compte à rebours`, true); }
+      const left = Math.max(0, dur - (now - S.over[k]));
+      warn = `${name} à ${t.toFixed(1)} °C (limite ${lim} °C) — action dans ${(left/1000).toFixed(1)} s`;
+      if (left === 0) trigger(`${name} à ${t.toFixed(1)} °C pendant plus de ${dur/1000} s`);
+    } else if (S.over[k]){
+      S.over[k] = 0;
+      if (!S.triggered) sLog(`${name} redescendue sous ${lim} °C — fausse alerte annulée`);
+    }
+  }
+  // Tant que c'est déclenché et encore chaud : on renvoie la coupure des chauffes toutes les 5 s
+  if (S.triggered && (S.over.noz || S.over.bed) && now - S.lastResend > 5000){
+    S.lastResend = now;
+    if (sv("sHeat")) { send(CMD.nozOff); send(CMD.bedOff); send(CMD.gcodeOff); }
+  }
+  if (S.triggered) setStat("alarm", "DÉCLENCHÉE — " + $("alarmTxt").textContent.replace(/^⚠ /, ""));
+  else if (warn) setStat("warn", warn);
+  else if (tn !== null) setStat("ok", `Active · buse ${tn.toFixed(0)}/${limN} °C · plateau ${tb !== null ? tb.toFixed(0) : "—"}/${limB} °C`);
+}
+
+function trigger(reason){
+  if (S.triggered) return;
+  S.triggered = true; S.lastResend = Date.now();
+  const done = [];
+  if (sv("sStop")) done.push(send(CMD.stop) ? "arrêt envoyé" : "arrêt NON envoyé (déconnecté)");
+  if (sv("sHeat")){ const ok = send(CMD.nozOff) & send(CMD.bedOff) & send(CMD.gcodeOff); done.push(ok ? "coupure des chauffes envoyée" : "coupure des chauffes NON envoyée (déconnecté)"); }
+  sLog(`DÉCLENCHÉ : ${reason} → ${done.join(", ") || "aucune action"}`, true);
+  alarm(`⚠ ${reason}${done.length ? " — " + done.join(", ") : ""}`);
+  remoteNotify("K1 Max - ALERTE TEMPERATURE", `${reason}. ${done.join(", ")}.`);
+}
+
+/* ---- Alertes à distance via ntfy.sh (push téléphone + courriel / SMS) ---- */
+const latin1 = s => s.normalize("NFC").replace(/[^\x20-\xFF]/g, "");   // les en-têtes HTTP n'acceptent pas tout
+/* ---- Capture jointe aux alertes : caméra (si dispo) + plateau + températures ---- */
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("délai")), ms))]);
+const loadImg = src => new Promise((res, rej) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => res(i); i.onerror = rej; i.src = src; });
+
+async function cameraFrame(){
+  const ip = $("ip").value.trim();
+  // 1) snapshot direct (mjpg-streamer) ; 2) image du flux en cours si elle n'est pas « contaminée »
+  try {
+    const r = await withTimeout(fetch(`http://${ip}:8080/?action=snapshot`, {cache:"no-store"}), 3000);
+    if (r.ok){ const b = await r.blob(); const u = URL.createObjectURL(b); const im = await loadImg(u); return im; }
+  } catch(e){}
+  try { return await withTimeout(loadImg(`http://${ip}:8080/?action=snapshot&t=${Date.now()}`), 3000); } catch(e){}
+  return null;
+}
+
+async function plateImage(size){
+  // Copie du SVG du plateau + ses styles, convertie en image
+  const clone = pSvg.cloneNode(true);
+  clone.setAttribute("width", size); clone.setAttribute("height", size);
+  clone.querySelectorAll("#pNoz line").forEach(l => l.remove());
+  let css = "";
+  for (const sh of document.styleSheets){ try { for (const r of sh.cssRules){
+    if (r.selectorText && /#p(Bed|Grid|Labels|Objs|Trail|Noz|Gcode|Ghost)/.test(r.selectorText))
+      css += (document.body.classList.contains("hasG") ? r.cssText.replace(/body\.hasG\s+/g, "") : (r.selectorText.includes("hasG") ? "" : r.cssText)) + "\n";
+  } } catch(e){} }
+  const st = document.createElementNS(SVGNS, "style"); st.textContent = css.replace(/var\(--[^)]+\)/g, "#8a919c");
+  clone.insertBefore(st, clone.firstChild);
+  const bg = document.createElementNS(SVGNS, "rect");
+  Object.entries({x:P.vb.x, y:P.vb.y, width:P.vb.w, height:P.vb.h, fill:"#08090b"}).forEach(([k,v]) => bg.setAttribute(k, v));
+  clone.insertBefore(bg, st.nextSibling);
+  const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], {type:"image/svg+xml"}));
+  try { return await loadImg(url); } finally { setTimeout(() => URL.revokeObjectURL(url), 5000); }
+}
+
+async function makeCapture(reason){
+  const cam = await cameraFrame().catch(() => null);
+  const PS = 600, H = 70;
+  const camW = cam ? Math.round(PS * cam.naturalWidth / cam.naturalHeight) : 0;
+  const W = camW + PS, c = document.createElement("canvas");
+  c.width = W; c.height = PS + H;
+  const g = c.getContext("2d");
+  g.fillStyle = "#0e1013"; g.fillRect(0, 0, W, c.height);
+  if (cam) g.drawImage(cam, 0, H, camW, PS);
+  try { g.drawImage(await plateImage(PS), camW, H, PS, PS); } catch(e){}
+  // Bandeau d'infos
+  g.fillStyle = reason ? "#c62828" : "#1c2027"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "#fff"; g.font = "600 24px Segoe UI, sans-serif";
+  g.fillText((reason || "K1 Max").slice(0, 80), 18, 30);
+  g.font = "18px Consolas, monospace"; g.fillStyle = "#ffd9c2";
+  const rl = gRealLayer();
+  g.fillText(`Buse ${fmtDeg(data.nozzleTemp)}  Plateau ${fmtDeg(data.bedTemp0)}  Enceinte ${fmtDeg(data.boxTemp)}  ·  Couche ${rl ? rl + "/" + G.layers.length : (data.layer ?? "?") + "/" + (data.TotalLayer ?? "?")}  ·  ${new Date().toLocaleTimeString("fr-CA")}`, 18, 58);
+  if (!cam){ g.fillStyle = "#8a919c"; g.font = "14px Segoe UI, sans-serif"; g.fillText("(caméra non disponible)", W - 190, H + 22); }
+  return await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
+}
+const blobToDataUrl = b => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
+
+async function remoteNotify(title, body, isTest){
+  const topic = $("rTopic").value.trim(), srv = $("rUrl").value.trim().replace(/\/+$/, ""), stok = $("rTok").value.trim();
+  if (!topic && !srv){ if (isTest) $("rStat").textContent = "Configure ton serveur ou un sujet ntfy d'abord"; return; }
+  let img = null;
+  if ($("rImg").checked){ try { img = await withTimeout(makeCapture(isTest ? "TEST — " + body.slice(0, 60) : title.replace(/^K1 Max - /, "")), 8000); } catch(e){ sLog("Capture impossible : " + e.message, true); } }
+  const jobs = [];
+  // 1) Ton serveur cPanel (push Android + courriels + SMS configurés dans config.php)
+  if (srv){
+    jobs.push(["mon serveur", (async () => fetch(`${srv}/send.php`, {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({token: stok, title, body, priority: "high", test: !!isTest, image: img ? await blobToDataUrl(img) : undefined})}))()
+      .then(async r => { const j = await r.json().catch(() => ({})); if (r.ok && j.results){ const pu = j.results.push || []; r.detail = `${pu.filter(x => x.code >= 200 && x.code < 300).length}/${pu.length} tél.`; } else r.detail = j.error || ""; return r; })]);
+  }
+  // 2) ntfy.sh
+  if (topic){
+    const url = `https://ntfy.sh/${encodeURIComponent(topic)}`;
+    const base = {Title: latin1(title), Priority: "5", Tags: isTest ? "white_check_mark" : "rotating_light,fire"};
+    if (img){
+      // Avec image : l'image est le corps de la requête, le texte passe dans l'URL (UTF-8 sans souci)
+      const q = new URLSearchParams({title, message: body, priority: "5", tags: base.Tags, filename: "capture-k1.jpg"});
+      jobs.push(["ntfy", fetch(`${url}?${q}`, {method:"PUT", body: img})]);
+    } else jobs.push(["ntfy", fetch(url, {method:"POST", body, headers: base})]);
+    for (const [name, id] of [["courriel","rEmail"], ["SMS","rSms"]]){
+      const to = $(id).value.trim();
+      if (to) jobs.push([name, fetch(url, {method:"POST", body: name === "SMS" ? body.slice(0, 150) : body, headers: {...base, Email: to}})]);
+    }
+  }
+  const res = await Promise.allSettled(jobs.map(j => j[1]));
+  const msg = jobs.map(([n], i) => { const v = res[i].value; const ok = res[i].status === "fulfilled" && v.ok;
+    return `${n} ${ok ? "✓" : "✗"}${v && v.detail ? " " + v.detail : (!ok && v ? " (" + v.status + ")" : "")}`; }).join(" · ");
+  sLog(`Alerte à distance : ${msg}`, msg.includes("✗"));
+  if (isTest) $("rStat").textContent = msg;
+}
+$("rTest").onclick = () => { $("rStat").textContent = "Envoi…"; remoteNotify("K1 Max - test", "Test des alertes du tableau de bord K1 Max. Si tu lis ceci, ça marche.", true); };
+["rUrl","rTok","rTopic","rEmail","rSms"].forEach(id => {
+  try { const v = localStorage.getItem("k1r_" + id); if (v !== null) $(id).value = v; } catch(e){}
+  $(id).addEventListener("change", () => { try { localStorage.setItem("k1r_" + id, $(id).value.trim()); } catch(e){} });
+});
+try { const v = localStorage.getItem("k1r_rImg"); if (v !== null) $("rImg").checked = v === "1"; } catch(e){}
+$("rImg").addEventListener("change", () => { try { localStorage.setItem("k1r_rImg", $("rImg").checked ? "1" : "0"); } catch(e){} });
+$("rPrev").onclick = async () => {
+  $("rStat").textContent = "Capture…";
+  const b = await makeCapture("Aperçu").catch(e => { $("rStat").textContent = "Capture impossible : " + e.message; });
+  if (!b) return;
+  const w = window.open(URL.createObjectURL(b), "_blank");
+  $("rStat").textContent = w ? "Aperçu ouvert dans un nouvel onglet" : "Bloqué par le navigateur : autorise les fenêtres pop-up";
+};
+let topicSaved = false; try { topicSaved = localStorage.getItem("k1r_rTopic") !== null; } catch(e){}
+if (!topicSaved && !$("rTopic").value){
+  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(5)), b => b.toString(36).padStart(2,"0")).join("").slice(0,8);
+  $("rTopic").value = `k1max-${rnd}`;
+  try { localStorage.setItem("k1r_rTopic", $("rTopic").value); } catch(e){}
+}
+
+// Alarme : bandeau rouge + son + notification Windows
+let audioCtx = null, beepTimer = null;
+function alarm(txt){
+  S.alarm = true;
+  $("alarmTxt").textContent = txt; $("alarmBar").style.display = "flex"; $("sAck").classList.remove("hide");
+  document.title = "⚠ ALERTE — K1 Max";
+  if (sv("sSound")){
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      audioCtx.resume();
+      const beep = () => { [0, .25].forEach(t => { const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+        o.type = "square"; o.frequency.value = 1100; g.gain.value = .15; o.connect(g); g.connect(audioCtx.destination);
+        o.start(audioCtx.currentTime + t); o.stop(audioCtx.currentTime + t + .15); }); };
+      beep(); clearInterval(beepTimer); beepTimer = setInterval(beep, 1000);
+    } catch(e){}
+  }
+  try { if ("Notification" in window && Notification.permission === "granted") new Notification("K1 Max — ALERTE", {body: txt.replace(/^⚠ /, ""), requireInteraction: true}); } catch(e){}
+}
+function ack(){
+  S.alarm = false; clearInterval(beepTimer);
+  $("alarmBar").style.display = "none"; $("sAck").classList.add("hide"); document.title = "K1 Max";
+  const hot = S.over.noz || S.over.bed;
+  if (S.triggered && !hot){ S.triggered = false; sLog("Alarme coupée, surveillance réarmée"); }
+  else if (S.triggered) sLog("Alarme coupée — reste déclenchée tant que la température est au-dessus de la limite", true);
+  S.lostAlerted = false;
+  safetyCheck();
+}
+$("alarmAck").onclick = ack; $("sAck").onclick = ack;
+$("sTest").onclick = () => {
+  try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch(e){}
+  sLog("Test de l'alarme (aucune commande envoyée)");
+  alarm("⚠ TEST — ceci est un test, rien n'a été envoyé à l'imprimante");
+};
+
+// Connexion perdue pendant une impression
+setInterval(() => {
+  safetyCheck();
+  if (!sv("sArm") || !sv("sLost") || S.lostAlerted) return;
+  const printing = num(data.state) === 1;
+  if (printing && lastData && Date.now() - lastData > 20000){
+    S.lostAlerted = true;
+    sLog("Plus de données depuis 20 s pendant une impression — surveillance impossible", true);
+    alarm("⚠ Connexion perdue pendant l'impression : la surveillance ne voit plus l'imprimante");
+    remoteNotify("K1 Max - connexion perdue", "Le tableau de bord ne recoit plus de donnees de l'imprimante depuis 20 s pendant une impression. Va verifier.");
+  }
+}, 1000);
+
+// Sauvegarde des réglages
+SKEYS.forEach(id => {
+  try { const v = localStorage.getItem("k1s_" + id); if (v !== null){ const e = $(id); e.type === "checkbox" ? e.checked = v === "1" : e.value = v; } } catch(e){}
+  $(id).addEventListener("change", () => {
+    const e = $(id);
+    try { localStorage.setItem("k1s_" + id, e.type === "checkbox" ? (e.checked ? "1" : "0") : e.value); } catch(_){}
+    if (id === "sArm") sLog(e.checked ? "Surveillance activée" : "Surveillance DÉSACTIVÉE", !e.checked);
+    safetyCheck();
+  });
+});
+document.addEventListener("click", () => { try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch(e){} }, {once:true});
+
+/* ================= Bed mesh ================= */
+const M = { grid:null, min:[0,0], max:[300,300], src:"", az:-0.35, el:0.95, exag:1 };
+
+function meshSet(grid, mn, mx, src){
+  grid = grid.filter(r => Array.isArray(r) && r.length).map(r => r.map(Number));
+  if (!grid.length || grid.some(r => r.length !== grid[0].length || r.some(v => !isFinite(v)))) { meshMsg("warn", "Maillage illisible (grille vide ou incomplète)"); return false; }
+  M.grid = grid; M.min = mn || [0,0]; M.max = mx || [BED,BED]; M.src = src;
+  try { localStorage.setItem("k1mesh", JSON.stringify({grid, min:M.min, max:M.max, src, t:Date.now()})); } catch(e){}
+  $("mWrap").classList.remove("hide");
+  meshMsg("ok", `${grid[0].length} × ${grid.length} points · source : ${src}`);
+  meshDraw();
+  return true;
+}
+const meshMsg = (cls, t) => { $("mStat").className = "mstat " + cls; $("mStat").textContent = t; };
+
+// Couleur : bleu = creux, blanc = 0, rouge = bosse (échelle symétrique)
+function meshColor(v, a){
+  const t = Math.max(-1, Math.min(1, v / (a || 1)));
+  const c = t < 0 ? [74 + (1+t)*170, 140 + (1+t)*100, 255] : [255, 240 - t*150, 240 - t*190];
+  return `rgb(${c.map(Math.round).join(",")})`;
+}
+function meshStats(){
+  const all = M.grid.flat(); const mn = Math.min(...all), mx = Math.max(...all);
+  const mean = all.reduce((a, b) => a + b, 0) / all.length;
+  return {mn, mx, range: mx - mn, mean, amp: Math.max(Math.abs(mn), Math.abs(mx), 0.01)};
+}
+
+function meshDraw(){
+  if (!M.grid) return;
+  const st = meshStats(), rows = M.grid.length, cols = M.grid[0].length;
+  // --- Carte 2D (Y vers le haut, comme le plateau) ---
+  const hc = $("mHeat"), dpr = devicePixelRatio || 1, S = hc.clientWidth || 300;
+  hc.style.height = S + "px"; hc.width = S*dpr; hc.height = S*dpr; const g = hc.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0,0,S,S);
+  const pad = 28, cw = (S - pad - 8) / cols, ch = (S - pad - 22) / rows;
+  g.font = `${Math.max(9, Math.min(13, cw/4.2))}px ui-monospace, Consolas, monospace`; g.textAlign = "center"; g.textBaseline = "middle";
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){
+    const v = M.grid[r][c], x = pad + c*cw, y = 8 + (rows - 1 - r)*ch;
+    g.fillStyle = meshColor(v, st.amp); g.fillRect(x + 1, y + 1, cw - 2, ch - 2);
+    if (cw > 30){ g.fillStyle = Math.abs(v)/st.amp > .6 ? "#fff" : "#111"; g.fillText((v >= 0 ? "+" : "") + v.toFixed(3).replace(/^(-?)0\./, "$1."), x + cw/2, y + ch/2); }
+  }
+  // Repère : rangée du bas = avant (Y min), colonne de gauche = X min → coin avant-gauche
+  const gy = 8 + rows*ch;
+  g.strokeStyle = "#f5b942"; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(pad + 1, gy - Math.min(ch*.6, 18)); g.lineTo(pad + 1, gy - 1); g.lineTo(pad + Math.min(cw*.6, 18), gy - 1); g.stroke();
+  g.fillStyle = "#f5b942"; g.font = "600 11px Segoe UI, sans-serif"; g.textAlign = "center";
+  g.fillText("▼ AVANT ▼", pad + cols*cw/2 + 20, gy + 8);
+  g.textAlign = "left"; g.fillText("↙ avant-gauche", pad - 4, gy + 8);
+  g.fillStyle = "#8a919c"; g.font = "10px ui-monospace, Consolas, monospace";
+  g.textAlign = "right"; g.fillText(`X ${M.min[0]}→${M.max[0]}`, S - 6, S - 4);
+  g.textAlign = "left";
+  g.save(); g.translate(10, gy); g.rotate(-Math.PI/2); g.fillText(`Y ${M.min[1]}→${M.max[1]}`, 0, 0); g.restore();
+
+  // --- Vue 3D (surface ombrée, on peut tourner) ---
+  const c3 = $("m3d"), S3 = c3.clientWidth || 300;
+  c3.style.height = S3 + "px"; c3.width = S3*dpr; c3.height = S3*dpr; const q = c3.getContext("2d"); q.scale(dpr, dpr); q.clearRect(0,0,S3,S3);
+  const zs = 0.55 * M.exag / st.amp;                        // hauteur relative (exagérée pour voir le relief)
+  const P3 = (c, r) => {
+    const x = (c/(cols-1) - .5) * 2, y = (r/(rows-1) - .5) * 2, z = (M.grid[r][c] - st.mean) * zs;
+    const ca = Math.cos(M.az), sa = Math.sin(M.az), x1 = x*ca - y*sa, y1 = x*sa + y*ca;
+    const ce = Math.cos(M.el), se = Math.sin(M.el), y2 = y1*ce + z*se, d = y1*se - z*ce;
+    return [S3/2 + x1*S3*0.3, S3/2 - y2*S3*0.3 + S3*0.05, d];
+  };
+  const quads = [];
+  for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols - 1; c++){
+    const pts = [P3(c,r), P3(c+1,r), P3(c+1,r+1), P3(c,r+1)];
+    const v = (M.grid[r][c] + M.grid[r][c+1] + M.grid[r+1][c+1] + M.grid[r+1][c]) / 4;
+    quads.push({pts, v, d: pts.reduce((a, p) => a + p[2], 0)/4});
+  }
+  quads.sort((a, b) => b.d - a.d);
+  for (const qd of quads){
+    q.beginPath(); qd.pts.forEach((p, i) => i ? q.lineTo(p[0], p[1]) : q.moveTo(p[0], p[1])); q.closePath();
+    q.fillStyle = meshColor(qd.v - st.mean, st.amp); q.fill();
+    q.strokeStyle = "#0008"; q.lineWidth = 1; q.stroke();
+  }
+  q.fillStyle = "#8a919c"; q.font = "11px ui-monospace, Consolas, monospace"; q.fillText(`relief ×${M.exag.toFixed(1)}`, 8, 16);
+  // Repère : coin avant-gauche (point 0,0) + milieu du bord avant
+  const fl = P3(0, 0), fr = P3(cols - 1, 0);
+  q.fillStyle = "#f5b942"; q.strokeStyle = "#000"; q.lineWidth = 2;
+  q.beginPath(); q.arc(fl[0], fl[1], 6, 0, Math.PI*2); q.fill(); q.stroke();
+  q.font = "600 12px Segoe UI, sans-serif"; q.textAlign = "center";
+  const lx = Math.max(42, Math.min(S3 - 42, fl[0])), ly = Math.min(S3 - 6, fl[1] + 20);
+  q.strokeText("avant-gauche", lx, ly); q.fillText("avant-gauche", lx, ly);
+  const fm = [(fl[0] + fr[0])/2, (fl[1] + fr[1])/2];
+  q.strokeText("AVANT", fm[0], fm[1] + 22); q.fillText("AVANT", fm[0], fm[1] + 22);
+  q.textAlign = "left";
+
+  // --- Chiffres ---
+  const verdict = st.range < .15 ? ["Excellent", "var(--ok)"] : st.range < .3 ? ["Bon", "var(--ok)"] : st.range < .5 ? ["Moyen — le maillage compense, mais surveille la 1re couche", "var(--warn)"] : ["Gros écart — vérifie le plateau (vis, déformation, saleté sous la plaque)", "var(--err)"];
+  $("mStats").innerHTML = [["Min", st.mn], ["Max", st.mx], ["Écart total", st.range], ["Moyenne", st.mean]]
+    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${(v >= 0 && k !== "Écart total" ? "+" : "")}${v.toFixed(3)} mm</div></div>`).join("")
+    + `<div class="mverdict" style="border-left:3px solid ${verdict[1]}">Planéité : <b>${verdict[0]}</b> (écart ${st.range.toFixed(3)} mm)</div>`;
+}
+
+// Lecture du bloc SAVE_CONFIG de printer.cfg (ou texte équivalent)
+function parseSaveConfig(txt){
+  const lines = txt.split(/\r?\n/).map(l => l.replace(/^\s*#\*#\s?/, ""));
+  let start = lines.findIndex(l => /^\s*\[bed_mesh\s+([^\]]+)\]/.test(l));
+  if (start < 0) start = 0;
+  const grid = [], params = {};
+  let inPts = false;
+  for (let i = start + (start >= 0 ? 1 : 0); i < lines.length; i++){
+    const l = lines[i];
+    if (/^\s*\[/.test(l) && i > start) break;
+    if (/^\s*points\s*[=:]/.test(l)){ inPts = true; const rest = l.split(/[=:]/)[1]; if (rest && rest.trim()) grid.push(rest.split(",").map(Number)); continue; }
+    const kv = /^\s*(\w+)\s*[=:]\s*(.+)$/.exec(l);
+    if (kv){ inPts = false; params[kv[1]] = kv[2].trim(); continue; }
+    if (inPts && /[-\d]/.test(l)) grid.push(l.split(",").map(s => Number(s.trim())).filter(v => !isNaN(v)));
+  }
+  if (!grid.length) return false;
+  return meshSet(grid, [num(params.min_x) ?? 0, num(params.min_y) ?? 0], [num(params.max_x) ?? BED, num(params.max_y) ?? BED], "printer.cfg");
+}
+// Réponse Moonraker /printer/objects/query?bed_mesh (ou l'objet bed_mesh seul)
+function parseMoonraker(j, src){
+  const bm = j?.result?.status?.bed_mesh || j?.status?.bed_mesh || j?.bed_mesh || j;
+  if (!bm || typeof bm !== "object") return false;
+  if (Array.isArray(bm.probed_matrix) && bm.probed_matrix.length && bm.probed_matrix[0].length)
+    return meshSet(bm.probed_matrix, bm.mesh_min, bm.mesh_max, src || `Moonraker (profil ${bm.profile_name || "?"})`);
+  const prof = bm.profiles && Object.entries(bm.profiles)[0];
+  if (prof && prof[1].points){
+    const mp = prof[1].mesh_params || {};
+    return meshSet(prof[1].points, [mp.min_x, mp.min_y], [mp.max_x, mp.max_y], src || `Moonraker (profil enregistré « ${prof[0]} »)`);
+  }
+  return false;
+}
+function parseAny(txt, src){
+  txt = String(txt || "").trim();
+  if (!txt) return false;
+  if (/^[\[{]/.test(txt)){ try { const j = JSON.parse(txt); if (Array.isArray(j)) return meshSet(j, null, null, src || "JSON"); return parseMoonraker(j, src); } catch(e){} }
+  return parseSaveConfig(txt);
+}
+
+// Cherche un maillage dans les données du websocket (si le firmware en envoie un)
+function meshFromWs(){
+  for (const [k, v] of Object.entries(data)){
+    if (!/mesh|level|probe/i.test(k)) continue;
+    if (Array.isArray(v) && Array.isArray(v[0]) && meshSet(v, null, null, `websocket (${k})`)) return true;
+    if (isObj(v) && parseMoonraker(v, `websocket (${k})`)) return true;
+    if (typeof v === "string" && /points/.test(v) && parseSaveConfig(v)) return true;
+  }
+  return false;
+}
+
+// Format du firmware Creality : probedMatrix = { val: [ {x, y, z}, … ] } → on reconstruit la grille
+function meshFromPoints(v){
+  const pts = (Array.isArray(v) ? v : v && v.val) || [];
+  if (!pts.length) return false;
+  const r2 = n => Math.round(+n * 100) / 100;
+  const xs = [...new Set(pts.map(p => r2(p.x)))].sort((a, b) => a - b);
+  const ys = [...new Set(pts.map(p => r2(p.y)))].sort((a, b) => a - b);
+  const map = new Map(pts.map(p => [r2(p.x) + ":" + r2(p.y), +p.z]));
+  const grid = ys.map(y => xs.map(x => map.has(x + ":" + y) ? map.get(x + ":" + y) : NaN));
+  // trous éventuels → moyenne des voisins connus
+  grid.forEach((row, r) => row.forEach((z, c) => { if (isNaN(z)){ const n = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]].map(([a,b]) => grid[a]?.[b]).filter(v => isFinite(v)); row[c] = n.length ? n.reduce((a,b)=>a+b,0)/n.length : 0; } }));
+  return meshSet(grid, [xs[0], ys[0]], [xs[xs.length-1], ys[ys.length-1]], "imprimante (reqProbedMatrix)");
+}
+let meshWaiting = null;
+
+async function meshFetch(){
+  const ip = $("ip").value.trim();
+  meshMsg("", "Recherche du maillage…");
+  // 0) Firmware Creality : on le demande par le websocket (comme l'interface web de l'imprimante)
+  if (ws && ws.readyState === 1){
+    const got = await new Promise(res => {
+      meshWaiting = res;
+      ws.send(JSON.stringify({method:"get", params:{reqProbedMatrix:1}}));
+      setTimeout(() => { if (meshWaiting === res){ meshWaiting = null; res(false); } }, 4000);
+    });
+    if (got) return;
+  }
+  // 1) Moonraker (port 7125) — présent si l'imprimante est rootée, et sur certains firmwares récents
+  try {
+    const r = await withTimeout(fetch(`http://${ip}:7125/printer/objects/query?bed_mesh`, {cache:"no-store"}), 3000);
+    if (r.ok && parseMoonraker(await r.json())) return;
+  } catch(e){}
+  // 2) Fluidd/Mainsail via nginx (port 4408 / 80) qui relaie Moonraker
+  for (const base of [`http://${ip}:4408`, `http://${ip}`]){
+    try {
+      const r = await withTimeout(fetch(`${base}/printer/objects/query?bed_mesh`, {cache:"no-store"}), 2500);
+      if (r.ok && parseMoonraker(await r.json(), `Moonraker via ${base}`)) return;
+    } catch(e){}
+  }
+  // 3) Données du websocket
+  if (meshFromWs()) return;
+  meshMsg("warn", "Ton imprimante n'expose pas le maillage en direct (firmware d'origine). Importe ton printer.cfg ou colle le bloc [bed_mesh] ci-dessous.");
+}
+
+$("mFetch").onclick = meshFetch;
+function meshView(v){
+  $("mBox3").classList.toggle("hide", v !== "3d"); $("mBox2").classList.toggle("hide", v !== "2d");
+  $("mV3").classList.toggle("on", v === "3d"); $("mV2").classList.toggle("on", v === "2d");
+  try { localStorage.setItem("k1meshView", v); } catch(e){}
+  meshDraw();
+}
+$("mV3").onclick = () => meshView("3d"); $("mV2").onclick = () => meshView("2d");
+try { const v = localStorage.getItem("k1meshView"); if (v === "2d") meshView("2d"); } catch(e){}
+$("mImport").onclick = () => $("mFile").click();
+$("mFile").onchange = async e => { const f = e.target.files[0]; if (f && !parseAny(await f.text(), f.name)) meshMsg("warn", `Aucun maillage trouvé dans ${f.name}`); };
+$("mParse").onclick = () => { if (!parseAny($("mText").value, "texte collé")) meshMsg("warn", "Aucun maillage reconnu dans le texte collé"); };
+// Rotation à la souris, exagération à la molette
+{ let d = null; const cv = $("m3d");
+  cv.addEventListener("pointerdown", e => { d = {x:e.clientX, y:e.clientY, az:M.az, el:M.el}; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener("pointermove", e => { if (!d) return; M.az = d.az + (e.clientX - d.x)*0.01; M.el = Math.max(0.15, Math.min(1.45, d.el + (e.clientY - d.y)*0.01)); meshDraw(); });
+  cv.addEventListener("pointerup", () => d = null);
+  cv.addEventListener("wheel", e => { e.preventDefault(); M.exag = Math.max(.2, Math.min(5, M.exag * Math.exp(-e.deltaY*0.0015))); meshDraw(); }, {passive:false});
+}
+window.addEventListener("resize", meshDraw);
+try { const s = JSON.parse(localStorage.getItem("k1mesh") || "null"); if (s && s.grid){ meshSet(s.grid, s.min, s.max, s.src + " (mémorisé)"); } } catch(e){}
+
+/* ---- Aperçu de l'impression en cours (image fournie par l'imprimante) ---- */
+let thumbFor = null;
+function refreshThumb(){
+  const f = String(data.printFileName || "");
+  if (!f || f === thumbFor) return;
+  thumbFor = f;
+  const img = $("thumb");
+  img.onload = () => img.classList.remove("hide");
+  img.onerror = () => img.classList.add("hide");
+  img.src = `http://${$("ip").value.trim()}/downloads/original/current_print_image.png?t=${Date.now()}`;
+}
+
+/* ================= Contrôle de l'imprimante ================= */
+// Formats tirés de l'interface web officielle de la K1 (static/js/app.js)
+function ask(title, detail, danger){
+  return new Promise(res => {
+    $("askT").textContent = title; $("askD").textContent = detail || "";
+    $("askBox").className = danger ? "danger" : "";
+    const done = v => { $("askBox").className = "hide"; document.removeEventListener("keydown", key); res(v); };
+    const key = e => { if (e.key === "Escape") done(false); if (e.key === "Enter") done(true); };
+    $("askYes").onclick = () => done(true); $("askNo").onclick = () => done(false);
+    document.addEventListener("keydown", key);
+    setTimeout(() => $("askNo").focus(), 0);
+  });
+}
+function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString("fr-CA")}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
+async function act(label, params, o = {}){
+  if (!ws || ws.readyState !== 1){ toast("Pas connecté à l'imprimante"); return false; }
+  if (o.confirm && !(await ask(label + " ?", o.detail, o.danger))) { cLog(`${label} — annulé`); return false; }
+  ws.send(JSON.stringify({method:"set", params}));
+  cLog(`${label} → envoyé`); sLog(`Commande : ${label}`);
+  return true;
+}
+const printingNow = () => num(data.state) === 1;
+
+$("cPause").onclick  = () => act("Mettre l'impression en pause", {pause:1}, {confirm:true, detail:"La buse se range et l'impression attend."});
+$("cResume").onclick = () => act("Reprendre l'impression", {pause:0}, {confirm:true});
+$("cStop").onclick   = () => act("ARRÊTER l'impression", {stop:1}, {confirm:true, danger:true, detail:"L'impression en cours sera annulée. On ne peut pas la reprendre ensuite."});
+$("cLight").onchange = e => act(e.target.checked ? "Allumer la lumière" : "Éteindre la lumière", {lightSw: e.target.checked ? 1 : 0});
+$("cClean").onclick  = () => act("Effacer l'erreur", {cleanErr:1}, {confirm:true});
+
+// Températures (bornées par les seuils de sécurité)
+function tempSet(kind){
+  const v = num($(kind === "noz" ? "cNoz" : "cBed").value);
+  if (v === null || v < 0) return toast("Température invalide");
+  const lim = kind === "noz" ? Math.min(sv("sNoz") || 300, num(data.maxNozzleTemp) || 300) : Math.min(sv("sBed") || 110, num(data.maxBedTemp) || 110);
+  if (v >= lim) return toast(`Refusé : ${v} °C ≥ limite de sécurité (${lim} °C)`);
+  return kind === "noz"
+    ? act(`Régler la buse à ${v} °C`, {nozzleTempControl: v}, {confirm: v > 0})
+    : act(`Régler le plateau à ${v} °C`, {bedTempControl: {num: 0, val: v}}, {confirm: v > 0});
+}
+$("cNozSet").onclick = () => tempSet("noz");
+$("cBedSet").onclick = () => tempSet("bed");
+document.querySelectorAll("[data-pre]").forEach(b => b.onclick = () => { const [n, p] = b.dataset.pre.split(","); $("cNoz").value = n; $("cBed").value = p; toast(`${b.textContent} : ${n} / ${p} °C — clique « Régler » pour appliquer`); });
+$("cCool").onclick = async () => { if (await act("Refroidir la buse", {nozzleTempControl:0})) act("Refroidir le plateau", {bedTempControl:{num:0, val:0}}); };
+
+// Ventilateurs (M106 P0 pièce · P1 boîtier · P2 auxiliaire) et vitesse
+const FANS = [["cFan0", 0, "modelFanPct", "pièce"], ["cFan1", 1, "caseFanPct", "boîtier"], ["cFan2", 2, "auxiliaryFanPct", "auxiliaire"]];
+const dragging = new Set();
+FANS.forEach(([id, p, key, name]) => {
+  const s = $(id);
+  s.oninput = () => { dragging.add(id); $(id + "v").textContent = s.value + " %"; };
+  s.onchange = () => { dragging.delete(id); act(`Ventilateur ${name} à ${s.value} %`, {gcodeCmd: `M106 P${p} S${Math.round(s.value / 100 * 255)}`}); };
+});
+$("cSpeed").oninput = () => { dragging.add("cSpeed"); $("cSpeedv").textContent = $("cSpeed").value + " %"; };
+$("cSpeed").onchange = () => { dragging.delete("cSpeed"); act(`Vitesse d'impression à ${$("cSpeed").value} %`, {setFeedratePct: +$("cSpeed").value}); };
+
+// Z offset en direct (pas relatifs, comme l'écran de l'imprimante)
+let zTotal = 0;
+document.querySelectorAll("[data-z]").forEach(b => b.onclick = async () => {
+  const d = +b.dataset.z;
+  if (Math.abs(zTotal + d) > 0.5) return toast("Limite : ±0,5 mm de changement par session");
+  if (await act(`Z offset ${d > 0 ? "+" : ""}${d} mm`, {setZOffset: (d > 0 ? "+" : "-") + Math.abs(d)}, {confirm: Math.abs(d) >= 0.05, detail: d < 0 ? "La buse va se rapprocher du plateau." : ""})){
+    zTotal = Math.round((zTotal + d) * 1000) / 1000;
+    $("cZtot").textContent = `(changement : ${zTotal > 0 ? "+" : ""}${zTotal.toFixed(3)} mm)`;
+  }
+});
+$("cZsave").onclick = () => act("Enregistrer le Z offset", {savePara:1}, {confirm:true, detail:`Changement de cette session : ${zTotal > 0 ? "+" : ""}${zTotal.toFixed(3)} mm.`});
+
+// Exclure une pièce (depuis la liste du plateau)
+$("plateList").addEventListener("click", async e => {
+  const b = e.target.closest(".exb"); if (!b) return;
+  e.stopPropagation();
+  const o = P.list[+b.dataset.i]; if (!o) return;
+  await act(`Exclure « ${cleanName(o.name)} »`, {excludeObjects:[o.name]}, {confirm:true, danger:true, detail:"Cette pièce ne sera plus imprimée. On ne peut pas revenir en arrière."});
+}, true);
+
+// Met l'affichage des contrôles à jour avec les données reçues
+function renderCtrl(){
+  $("cLight").checked = num(data.lightSw) === 1;
+  FANS.forEach(([id, p, key]) => { if (!dragging.has(id) && num(data[key]) !== null){ $(id).value = num(data[key]); $(id + "v").textContent = num(data[key]) + " %"; } });
+  if (!dragging.has("cSpeed") && num(data.curFeedratePct) !== null){ $("cSpeed").value = num(data.curFeedratePct); $("cSpeedv").textContent = num(data.curFeedratePct) + " %"; }
+  if (document.activeElement !== $("cNoz") && !$("cNoz").value && num(data.targetNozzleTemp) !== null) $("cNoz").value = num(data.targetNozzleTemp);
+  if (document.activeElement !== $("cBed") && !$("cBed").value && num(data.targetBedTemp0) !== null) $("cBed").value = num(data.targetBedTemp0);
+  const ec = data.err && num(data.err.errcode);
+  $("cErr").classList.toggle("hide", !ec);
+  if (ec) $("cErrTxt").textContent = `Erreur ${ec}${data.err.key ? " (clé " + data.err.key + ")" : ""}`;
+}
+
+/* ================= Fichiers, Historique, Console, Déplacements, CFS, Maintenance ================= */
+// Formats lus dans l'interface web officielle de la K1 (static/js/app.js) + doc communautaire
+const wsGet = k => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({method:"get", params:{[k]:1}})); };
+const ipBase = () => `http://${$("ip").value.trim()}`;
+const fmtSize = n => { n = num(n); if (n === null) return "—"; return n > 1048576 ? (n/1048576).toFixed(1) + " Mo" : (n/1024).toFixed(0) + " Ko"; };
+const fmtDate = t => { t = num(t); if (!t) return "—"; if (t < 1e12) t *= 1000; return new Date(t).toLocaleString("fr-CA", {dateStyle:"short", timeStyle:"short"}); };
+
+// Petite fenêtre avec un champ texte (pour renommer)
+function askInput(title, value){
+  return new Promise(res => {
+    $("askT").textContent = title; $("askD").innerHTML = `<input id="askIn" style="width:100%;box-sizing:border-box" spellcheck="false">`;
+    $("askIn").value = value; $("askBox").className = "";
+    const done = v => { $("askBox").className = "hide"; document.removeEventListener("keydown", key); res(v); };
+    const key = e => { if (e.key === "Escape") done(null); if (e.key === "Enter") done($("askIn").value.trim()); };
+    $("askYes").onclick = () => done($("askIn").value.trim()); $("askNo").onclick = () => done(null);
+    document.addEventListener("keydown", key);
+    setTimeout(() => { $("askIn").focus(); $("askIn").select(); }, 0);
+  });
+}
+
+/* ---- 1. Fichiers ---- */
+let FILES = [];
+function parseFiles(v){
+  // fileInfo = "chemin:nom:taille:couches:date:longueur_mm:miniature;…"
+  const txt = isObj(v) ? (v.fileInfo ?? "") : String(v || "");
+  return txt.split(";").filter(Boolean).map(line => {
+    const e = line.split(":");
+    if (e.length < 7) return null;
+    const thumb = e.slice(6).join(":"), tn = thumb.substring(thumb.lastIndexOf("/") + 1);
+    return {path: e[0], name: e[1], size: +e[2], layer: +e[3], time: +e[4], len: +e[5] / 1000, thumb: tn};
+  }).filter(Boolean).sort((a, b) => b.time - a.time);
+}
+function renderFiles(){
+  const q = $("fSearch").value.trim().toLowerCase();
+  const list = FILES.filter(f => !q || f.name.toLowerCase().includes(q));
+  const printing = num(data.state) === 1;
+  if (!FILES.length){ $("fList").innerHTML = `<div class="empty">Aucun fichier reçu. Clique « Rafraîchir ».</div>`; return; }
+  $("fList").innerHTML = `<div class="frow fhead"><span></span><span>Nom</span><span>Taille</span><span>Couches</span><span>Filament</span><span>Date</span><span></span></div>` +
+    list.map((f, i) => `<div class="frow" data-i="${FILES.indexOf(f)}">
+      <img loading="lazy" alt="" src="${ipBase()}/downloads/humbnail/${encodeURIComponent(f.thumb)}" onerror="this.onerror=null;this.src='${ipBase()}/downloads/defData/${encodeURIComponent(f.thumb)}'">
+      <span class="fname" title="${esc(f.path + "/" + f.name)}">${esc(f.name.replace(/\.gcode$/i, ""))}</span>
+      <span>${fmtSize(f.size)}</span><span>${f.layer || "—"}</span><span>${f.len ? f.len.toFixed(2) + " m" : "—"}</span><span>${fmtDate(f.time)}</span>
+      <span class="facts"><button data-fa="print" ${printing ? "disabled title='Une impression est en cours'" : ""}>Imprimer</button><button data-fa="ren">Renommer</button><button data-fa="del" class="danger">Supprimer</button></span>
+    </div>`).join("");
+}
+$("fList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-fa]"); if (!b) return;
+  const f = FILES[+b.closest(".frow").dataset.i]; if (!f) return;
+  const full = `${f.path}/${f.name}`;
+  if (b.dataset.fa === "print")
+    await act(`Lancer l'impression de « ${f.name} »`, {opGcodeFile: "printprt:" + full}, {confirm:true, detail:"Vérifie que le plateau est vide et propre."});
+  else if (b.dataset.fa === "del"){
+    if (await act(`Supprimer « ${f.name} »`, {opGcodeFile: "deleteprt:" + full}, {confirm:true, danger:true, detail:"Le fichier sera effacé de l'imprimante."})) setTimeout(() => wsGet("reqGcodeFile"), 1500);
+  } else if (b.dataset.fa === "ren"){
+    let n = await askInput("Nouveau nom", f.name); if (!n || n === f.name) return;
+    if (!/\.gcode$/i.test(n)) n += ".gcode";
+    if (/[\/:;]/.test(n)) return toast("Le nom ne peut pas contenir / : ;");
+    if (await act(`Renommer en « ${n} »`, {opGcodeFile: `renameprt:${full}:${f.path}/${n}`})) setTimeout(() => wsGet("reqGcodeFile"), 1500);
+  }
+});
+$("fRefresh").onclick = () => { $("fList").innerHTML = `<div class="empty">Chargement…</div>`; wsGet("reqGcodeFile"); };
+$("fSearch").addEventListener("input", renderFiles);
+
+// Envoi d'un G-code (POST /upload/<nom>, champ « file » seulement, comme l'interface officielle)
+async function uploadFile(file){
+  if (!file) return;
+  if (!/\.gcode$/i.test(file.name)) return toast("Seulement des fichiers .gcode");
+  if (String(data.printFileName || "").split("/").pop().toLowerCase() === file.name.toLowerCase()) return toast("Ce fichier est en cours d'impression");
+  if (!(await ask(`Envoyer « ${file.name} » (${fmtSize(file.size)}) à l'imprimante ?`, "Un fichier du même nom sera remplacé."))) return;
+  const fd = new FormData(); fd.append("file", file);
+  $("fUpStat").textContent = " — envoi en cours…";
+  try {
+    // La K1 ne renvoie pas d'en-têtes CORS : on envoie quand même (no-cors), puis on vérifie dans la liste
+    await fetch(`${ipBase()}/upload/${encodeURIComponent(file.name)}`, {method:"POST", body: fd, mode:"no-cors"});
+    $("fUpStat").textContent = " — envoyé, vérification…";
+    cLog(`Fichier envoyé : ${file.name}`);
+    let tries = 0;
+    const check = setInterval(() => {
+      wsGet("reqGcodeFile");
+      const ok = FILES.some(f => f.name === file.name && Math.abs(f.size - file.size) < 1024);
+      if (ok || ++tries > 6){ clearInterval(check); $("fUpStat").textContent = ok ? ` — ✓ ${file.name} est sur l'imprimante` : " — envoi fait, mais pas encore visible dans la liste (rafraîchis)"; }
+    }, 1500);
+  } catch(e){ $("fUpStat").textContent = " — échec : " + e.message; }
+}
+$("fUpBtn").onclick = () => $("fUp").click();
+$("fUp").onchange = e => uploadFile(e.target.files[0]);
+["dragover", "dragenter"].forEach(t => $("fDrop").addEventListener(t, e => { e.preventDefault(); $("fDrop").classList.add("on"); }));
+$("fDrop").addEventListener("dragleave", () => $("fDrop").classList.remove("on"));
+$("fDrop").addEventListener("drop", e => { e.preventDefault(); $("fDrop").classList.remove("on"); uploadFile(e.dataTransfer.files[0]); });
+
+/* ---- 2. Historique ---- */
+function renderHistory(){
+  const h = Array.isArray(data.historyList) ? [...data.historyList] : [];
+  if (!h.length){ $("hList").innerHTML = `<div class="empty">Aucun historique reçu. Clique « Rafraîchir ».</div>`; $("hSum").textContent = ""; return; }
+  h.sort((a, b) => (num(b.starttime) || 0) - (num(a.starttime) || 0));
+  const tot = h.reduce((a, x) => a + (num(x.usagetime) || 0), 0);
+  $("hSum").textContent = `${h.length} impressions · ${fmtDur(tot)} d'impression au total`;
+  const st = x => { const v = num(x.printStatus ?? x.status ?? x.state); return v === null ? "" : ({1:"✓ terminée", 2:"✓ terminée", 3:"✗ échec", 4:"✗ annulée"}[v] || `état ${v}`); };
+  $("hList").innerHTML = `<div class="frow hrow fhead"><span>Fichier</span><span>Début</span><span>Durée</span><span>Taille</span><span>État</span><span></span></div>` +
+    h.map(x => `<div class="frow hrow" data-id="${esc(x.id ?? "")}" title="${esc(JSON.stringify(x))}">
+      <span class="fname">${esc(String(x.filename ?? x.name ?? "?").split("/").pop().replace(/\.gcode$/i, ""))}</span>
+      <span>${fmtDate(x.starttime)}</span><span>${x.usagetime ? fmtDur(x.usagetime) : "—"}</span><span>${fmtSize(x.size)}</span><span>${st(x)}</span>
+      <span class="facts">${x.id !== undefined ? `<button data-ha="del" class="danger">Retirer</button>` : ""}</span></div>`).join("");
+}
+$("hList").addEventListener("click", async e => {
+  const b = e.target.closest("[data-ha=del]"); if (!b) return;
+  const id = b.closest(".frow").dataset.id; const idv = isNaN(+id) ? id : +id;
+  if (await act("Retirer cette impression de l'historique", {deleteHistory:[idv]}, {confirm:true})) setTimeout(() => wsGet("reqHistory"), 1200);
+});
+$("hRefresh").onclick = () => { $("hList").innerHTML = `<div class="empty">Chargement…</div>`; wsGet("reqHistory"); };
+
+/* ---- 3. Déplacements ---- */
+let mvStep = 10;
+document.querySelectorAll("#mvStep [data-st]").forEach(b => b.onclick = () => { mvStep = +b.dataset.st; document.querySelectorAll("#mvStep button").forEach(x => x.classList.toggle("on", x === b)); });
+const mvBlocked = () => { if (num(data.state) === 1){ toast("Déplacement bloqué : une impression est en cours"); return true; } return false; };
+document.querySelectorAll("[data-mv]").forEach(b => b.onclick = () => {
+  if (mvBlocked()) return;
+  const ax = b.dataset.mv, d = +b.dataset.dir * mvStep, f = ax === "Z" ? 600 : 3000;
+  act(`Déplacer ${ax} de ${d > 0 ? "+" : ""}${d} mm`, {setPosition: `${ax}${d} F${f}`}, {confirm: mvStep >= 50 || (ax === "Z" && mvStep >= 10), detail: ax === "Z" && d < 0 ? "Le plateau va monter vers la buse." : ""});
+});
+$("mvHomeXY").onclick  = () => !mvBlocked() && act("Origine X Y", {autohome:"X Y"});
+$("mvHomeZ").onclick   = () => !mvBlocked() && act("Origine Z", {autohome:"Z"}, {confirm:true, detail:"Le plateau va monter jusqu'au capteur."});
+$("mvHomeAll").onclick = () => !mvBlocked() && act("Origine complète (X Y Z)", {autohome:"X Y Z"}, {confirm:true});
+
+/* ---- 4. Console G-code ---- */
+const gHist = []; let gIdx = -1;
+function gOut(t, cls){ const d = document.createElement("div"); d.className = cls || ""; d.textContent = t; $("gOut").appendChild(d); $("gOut").scrollTop = 1e9; }
+async function gSend(cmd){
+  cmd = cmd.trim(); if (!cmd) return;
+  // Respecte les seuils de sécurité pour les commandes de chauffe
+  const m = /^(M104|M109|M140|M190)\b.*?\bS\s*(-?[\d.]+)/i.exec(cmd);
+  if (m){
+    const bed = /M140|M190/i.test(m[1]), v = +m[2], lim = bed ? (sv("sBed") || 110) : (sv("sNoz") || 300);
+    if (v >= lim){ gOut(`✗ refusé : ${v} °C ≥ limite de sécurité (${lim} °C)`, "bad"); return; }
+  }
+  if (/^\s*(SAVE_CONFIG|FIRMWARE_RESTART|RESTART|M112)\b/i.test(cmd) && !(await ask(`Envoyer « ${cmd} » ?`, "Cette commande redémarre ou arrête l'imprimante.", true))) return;
+  if (!$("gNoAsk").checked && !(await ask(`Envoyer « ${cmd} » ?`, "Commande G-code envoyée directement à l'imprimante."))) return;
+  if (!ws || ws.readyState !== 1){ gOut("✗ pas connecté", "bad"); return; }
+  ws.send(JSON.stringify({method:"set", params:{gcodeCmd: cmd}}));
+  gOut(`› ${cmd}`); sLog(`G-code : ${cmd}`);
+  gHist.unshift(cmd); gIdx = -1;
+}
+$("gForm").onsubmit = e => { e.preventDefault(); const c = $("gIn").value; $("gIn").value = ""; gSend(c); };
+$("gIn").addEventListener("keydown", e => {
+  if (e.key === "ArrowUp" && gHist.length){ gIdx = Math.min(gIdx + 1, gHist.length - 1); $("gIn").value = gHist[gIdx]; e.preventDefault(); }
+  if (e.key === "ArrowDown"){ gIdx = Math.max(gIdx - 1, -1); $("gIn").value = gIdx < 0 ? "" : gHist[gIdx]; e.preventDefault(); }
+});
+document.querySelectorAll("[data-g]").forEach(b => b.onclick = () => gSend(b.dataset.g));
+
+/* ---- 5. CFS : charger / décharger, séchage, recharge auto ---- */
+const cfsSlot = () => { const [b, m] = $("cfsSlot").value.split(":").map(Number); return {boxId: b, materialId: m}; };
+$("cfsLoad").onclick   = () => act(`Charger le slot ${$("cfsSlot").selectedOptions[0].text}`, {feedInOrOut: {...cfsSlot(), isFeed: 1}}, {confirm:true, detail: num(data.state) === 1 ? "Une impression est en cours !" : ""});
+$("cfsUnload").onclick = () => act(`Décharger le slot ${$("cfsSlot").selectedOptions[0].text}`, {feedInOrOut: {...cfsSlot(), isFeed: 0}}, {confirm:true, detail: num(data.state) === 1 ? "Une impression est en cours !" : ""});
+$("cfsDry").onclick = () => { const t = num($("cfsDryT").value); if (t === null || t <= 0 || t > 65) return toast("Température de séchage entre 1 et 65 °C");
+  act(`Sécher le CFS à ${t} °C`, {boxTempControl: t}, {confirm:true, detail:"Le boîtier du CFS va chauffer. Arrête-le quand c'est fini."}); };
+$("cfsDryOff").onclick = () => act("Arrêter le séchage du CFS", {boxTempControl: 0});
+$("cfsAuto").onchange = e => {
+  const cur = isObj(data.boxConfig) ? data.boxConfig : {};
+  act(e.target.checked ? "Activer la recharge auto du CFS" : "Désactiver la recharge auto du CFS",
+    {boxConfig: {autoRefill: e.target.checked ? 1 : 0, cAutoFeed: num(cur.cAutoFeed) ?? 1, cSelfTest: num(cur.cSelfTest) ?? 0, ignoreColorAutoFeed: num(cur.ignoreColorAutoFeed) ?? 0}});
+  setTimeout(() => wsGet("boxConfig"), 1500);
+};
+
+/* ---- 6. Maintenance ---- */
+$("mtPlr").onclick     = () => act("Reprendre l'impression après la coupure", {repoPlrStatus:1}, {confirm:true, detail:"À utiliser seulement si l'écran propose de reprendre une impression interrompue."});
+$("mtKlipper").onclick = () => act("Redémarrer Klipper", {restartKlipper:1}, {confirm:true, detail:"La connexion va couper quelques secondes."});
+$("mtFw").onclick      = () => act("Redémarrer le firmware", {restartFirmware:1}, {confirm:true, danger:true, detail:"Toute impression en cours sera perdue."});
+$("mtMesh").onclick    = () => act("Effacer le bed mesh enregistré", {rmProbedMatrix:1}, {confirm:true, danger:true, detail:"Il faudra refaire un nivellement automatique."});
+
+// Rafraîchit ces vues avec les données reçues
+function renderExtras(){
+  const fk = Object.keys(data).find(k => /^retGcodeFileInfo/.test(k));
+  if (fk){ const nf = parseFiles(data[fk]); if (JSON.stringify(nf) !== JSON.stringify(FILES)){ FILES = nf; if (curView === "files") renderFiles(); } }
+  if (curView === "history") renderHistory();
+  const m = /X:\s*(-?[\d.]+)\s*Y:\s*(-?[\d.]+)\s*Z:\s*(-?[\d.]+)/i.exec(String(data.curPosition || ""));
+  if (m) $("mvPos").textContent = `X ${(+m[1]).toFixed(1)} · Y ${(+m[2]).toFixed(1)} · Z ${(+m[3]).toFixed(2)}`;
+  if (isObj(data.boxConfig)) $("cfsAuto").checked = num(data.boxConfig.autoRefill) === 1;
+  const cb = isObj(data.boxsInfo) && (data.boxsInfo.materialBoxs || []).find(b => num(b.type) === 0);
+  $("cfsEnv").textContent = cb ? `boîtier : ${num(cb.temp) ?? "—"} °C · humidité ${num(cb.humidity) ?? "—"} %` : "";
+}
+
+/* ================= Mise en page « Fusion » : menu latéral + vues ================= */
+const VIEWS = ["overview", "plate", "mesh", "control", "files", "history", "console", "temps", "data", "safety"];
+// Cartes existantes rangées dans leur vue (le plateau va dans la tuile de la vue d'ensemble, ou en grand)
+const viewSec = v => document.querySelector(`.view[data-view="${v}"]`);
+viewSec("mesh").appendChild($("meshCard"));
+viewSec("control").appendChild($("ctrlCard"));
+viewSec("data").appendChild($("dataCard"));
+viewSec("safety").appendChild($("safeCard"));
+// Lien « Agrandir » dans l'en-tête du plateau (visible seulement en tuile)
+$("plateCard").querySelector(".phead h2").insertAdjacentHTML("afterend", `<a href="#plate" class="openfull" data-go="plate">Agrandir ›</a>`);
+$("plateCard").querySelector(".phead h2").textContent = "Plateau";
+
+let curView = "overview";
+function showView(v){
+  if (!VIEWS.includes(v)) v = "overview";
+  curView = v;
+  document.querySelectorAll(".view").forEach(s => s.classList.toggle("on", s.dataset.view === v));
+  document.querySelectorAll(".nav[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === v));
+  const pc = $("plateCard");
+  if (v === "plate"){ $("plateFull").appendChild(pc); pc.classList.remove("compact"); }
+  else { $("plateTile").appendChild(pc); pc.classList.add("compact"); }
+  try { localStorage.setItem("k1view", v); } catch(e){}
+  if (location.hash !== "#" + v) history.replaceState(null, "", "#" + v);
+  requestAnimationFrame(() => { plateFit(); drawChart(); meshDraw(); });
+  if (v === "files"){ renderFiles(); wsGet("reqGcodeFile"); }
+  if (v === "history"){ renderHistory(); wsGet("reqHistory"); }
+  if (v === "control"){ wsGet("boxConfig"); }
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll("[data-view]").forEach(b => { if (b.tagName === "BUTTON") b.addEventListener("click", () => showView(b.dataset.view)); });
+document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a){ e.preventDefault(); showView(a.dataset.go);
+  if (a.classList.contains("t-cfs")){ $("search").value = "cfs box material"; applyAll(); } } });
+window.addEventListener("hashchange", () => showView(location.hash.slice(1)));
+
+/* ---- CFS : lecture seule par le websocket ({"method":"get","params":{"boxsInfo":1}}) ---- */
+function cfsAsk(){ if (ws && ws.readyState === 1){ ws.send(JSON.stringify({method:"get", params:{boxsInfo:1}})); ws.send(JSON.stringify({method:"get", params:{boxConfig:1}})); } }
+setInterval(cfsAsk, 30000);
+function renderCfs(){
+  const bi = data.boxsInfo;
+  // Ordre réel des slots : bobines du CFS triées par numéro (1A→1D), puis le support externe à la fin.
+  // (format Creality : materialBoxs[].type 0 = CFS, 1 = support externe ; materials[].id = n° de slot)
+  let mats = [];
+  if (isObj(bi) && Array.isArray(bi.materialBoxs)){
+    const boxes = [...bi.materialBoxs].sort((a, b) => (num(a.type) === 1) - (num(b.type) === 1) || (num(a.id) ?? 0) - (num(b.id) ?? 0));
+    boxes.forEach((bx, bi2) => {
+      const ext = num(bx.type) === 1;
+      [...(bx.materials || [])].sort((a, b) => (num(a.id) ?? 0) - (num(b.id) ?? 0)).forEach(o => {
+        const slot = ext ? "Ext." : `${num(bx.id) || bi2 + 1}${"ABCD"[num(o.id) ?? 0] || (num(o.id) + 1)}`;
+        mats.push({c: colorOf(o) || "#000", o, slot});
+      });
+    });
+  } else if (isObj(bi)) mats = findMaterials(bi);
+  $("cfsCard").classList.toggle("hide", !mats.length);
+  if (!mats.length) return;
+  $("cfsTile").style.gridTemplateColumns = `repeat(${Math.min(Math.max(mats.length, 4), 8)}, minmax(0, 1fr))`;
+  $("cfsTile").innerHTML = mats.map((m, i) => {
+    const o = m.o, t = o.type ?? o.materialType ?? "", name = o.name ?? "", vend = o.vendor ?? "";
+    const pk = Object.keys(o).find(k => /percent|remain/i.test(k)), pct = pk ? num(o[pk]) : null;
+    const empty = !t && !name, sel = num(o.selected) === 1;
+    const extra = [o.minTemp && o.maxTemp ? `${o.minTemp}–${o.maxTemp} °C` : "", o.pressure ? `PA ${o.pressure}` : "", o.rfid ? `RFID ${o.rfid}` : ""].filter(Boolean).join(" · ");
+    return `<div class="cs${sel ? " sel" : ""}" title="${esc([m.slot, vend, name, t, extra].filter(Boolean).join(" · ") || "vide")}${pct !== null ? " · " + pct + " %" : ""}">
+      ${m.slot ? `<span class="slotn">${m.slot}</span>` : ""}<i style="background:${empty ? "transparent" : m.c};${empty ? "border-style:dashed" : ""}"></i><span>${esc(t || (empty ? "vide" : name))}</span>${pct !== null && !empty ? `<span class="meta">${pct} %</span>` : ""}</div>`;
+  }).join("");
+  const cfsBox = (bi.materialBoxs || []).find(b => num(b.type) === 0);
+  const cfg = isObj(data.boxConfig) ? data.boxConfig : null;
+  $("cfsMeta").textContent = [`${mats.filter(m => m.o.type || m.o.name).length} bobine(s)`,
+    cfsBox && num(cfsBox.temp) !== null ? `${num(cfsBox.temp)} °C` : "",
+    cfsBox && num(cfsBox.humidity) !== null ? `humidité ${num(cfsBox.humidity)} %` : "",
+    cfg && cfg.autoRefill !== undefined ? `recharge auto ${num(cfg.autoRefill) ? "oui" : "non"}` : ""].filter(Boolean).join(" · ");
+}
+
+/* ---- Tuiles de la vue d'ensemble ---- */
+function renderOverview(){
+  renderCfs();
+  // Heure de fin estimée
+  const lt = num(data.printLeftTime);
+  $("eta").textContent = lt && num(data.state) === 1 ? new Date(Date.now() + lt*1000).toLocaleTimeString("fr-CA", {hour:"2-digit", minute:"2-digit"}) : "—";
+  // Ventilateurs
+  const f = k => num(data[k]) === null ? "—" : num(data[k]) + " %";
+  const used = num(data.usedMaterialLength);
+  $("ovFans").innerHTML = `<span>Pièce <b>${f("modelFanPct")}</b></span><span>Boîtier <b>${f("caseFanPct")}</b></span><span>Auxiliaire <b>${f("auxiliaryFanPct")}</b></span>`
+    + `<span>Vitesse demandée <b>${f("curFeedratePct")}</b></span>`;
+  // En direct : vitesse, débit, hauteur, filament
+  const sp = num(data.realTimeSpeed), fl = num(data.realTimeFlow);
+  const zm = /Z:\s*(-?[\d.]+)/i.exec(String(data.curPosition || ""));
+  $("lvSpeed").textContent = sp === null ? "—" : `${Math.round(sp)} mm/s`;
+  $("lvFlow").textContent = fl === null ? "—" : `${fl.toFixed(1)} mm³/s`;
+  $("lvZ").textContent = zm ? `${(+zm[1]).toFixed(2)} mm` : "—";
+  $("lvFil").textContent = used === null ? "—" : used >= 1000 ? `${(used/1000).toFixed(2)} m` : `${used} mm`;
+}
+function renderMeshMini(){
+  if (!M.grid){ $("mMini").innerHTML = ""; $("mMiniTxt").textContent = "Aucun maillage"; return; }
+  const st = meshStats(), cols = M.grid[0].length;
+  $("mMini").style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+  const rows = M.grid.length, X = c => M.min[0] + (cols > 1 ? c * (M.max[0] - M.min[0]) / (cols - 1) : 0), Y = r => M.min[1] + (rows > 1 ? r * (M.max[1] - M.min[1]) / (rows - 1) : 0);
+  const cells = [];
+  for (let r = rows - 1; r >= 0; r--) for (let c = 0; c < cols; c++){      // avant (Y min) en bas
+    const v = M.grid[r][c], dark = Math.abs(v - st.mean) / st.amp > .6;
+    cells.push(`<div data-v="${v}" data-x="${Math.round(X(c))}" data-y="${Math.round(Y(r))}" title="X ${Math.round(X(c))} · Y ${Math.round(Y(r))} : ${(v >= 0 ? "+" : "") + v.toFixed(3)} mm" style="background:${meshColor(v - st.mean, st.amp)};color:${dark ? "#fff" : "#111"}">${(v >= 0 ? "+" : "") + v.toFixed(3).replace(/^(-?)0\./, "$1.")}</div>`);
+  }
+  $("mMini").innerHTML = cells.join("");
+  const verdict = st.range < .15 ? "excellent" : st.range < .3 ? "bon" : st.range < .5 ? "moyen" : "à vérifier";
+  M.miniTxt = `min ${st.mn.toFixed(3)} · max ${st.mx >= 0 ? "+" : ""}${st.mx.toFixed(3)} · écart ${st.range.toFixed(3)} mm · <span style="color:${st.range < .3 ? "var(--ok)" : st.range < .5 ? "var(--warn)" : "var(--err)"}">${verdict}</span>`;
+  $("mMiniTxt").innerHTML = M.miniTxt;
+}
+{ const md = meshDraw; meshDraw = function(){ md(); renderMeshMini(); }; }
+$("mMini").addEventListener("mouseover", e => { const d = e.target.closest("[data-v]"); if (!d) return; const v = +d.dataset.v;
+  $("mMiniTxt").innerHTML = `<b style="color:var(--text)">X ${d.dataset.x} · Y ${d.dataset.y}</b> : <span style="font-family:var(--mono)">${v >= 0 ? "+" : ""}${v.toFixed(3)} mm</span>`; });
+$("mMini").addEventListener("mouseleave", () => { if (M.miniTxt) $("mMiniTxt").innerHTML = M.miniTxt; });
+
+/* ---- Barre d'actions (mêmes commandes que la carte Contrôle) ---- */
+$("abPause").onclick  = () => $("cPause").click();
+$("abResume").onclick = () => $("cResume").click();
+$("abStop").onclick   = () => $("cStop").click();
+$("abLight").onchange = e => act(e.target.checked ? "Allumer la lumière" : "Éteindre la lumière", {lightSw: e.target.checked ? 1 : 0});
+$("abSet").onclick = async () => {
+  const n = $("abNoz").value, b = $("abBed").value;
+  if (n !== "" && n !== String(num(data.targetNozzleTemp))){ $("cNoz").value = n; await tempSet("noz"); }
+  if (b !== "" && b !== String(num(data.targetBedTemp0))){ $("cBed").value = b; await tempSet("bed"); }
+};
+$("abSpeed").oninput = () => { dragging.add("abSpeed"); $("abSpeedv").textContent = $("abSpeed").value + " %"; };
+$("abSpeed").onchange = () => { dragging.delete("abSpeed"); act(`Vitesse d'impression à ${$("abSpeed").value} %`, {setFeedratePct: +$("abSpeed").value}); };
+document.querySelectorAll("[data-abz]").forEach(b => b.onclick = () => document.querySelector(`[data-z="${b.dataset.abz}"]`).click());
+function renderActionBar(){
+  $("abLight").checked = num(data.lightSw) === 1;
+  if (!dragging.has("abSpeed") && num(data.curFeedratePct) !== null){ $("abSpeed").value = num(data.curFeedratePct); $("abSpeedv").textContent = num(data.curFeedratePct) + " %"; }
+  for (const [id, k] of [["abNoz", "targetNozzleTemp"], ["abBed", "targetBedTemp0"]])
+    if (document.activeElement !== $(id) && num(data[k]) !== null && $(id).dataset.edited !== "1") $(id).value = num(data[k]);
+}
+["abNoz", "abBed"].forEach(id => { $(id).addEventListener("input", () => $(id).dataset.edited = "1"); $(id).addEventListener("change", () => setTimeout(() => $(id).dataset.edited = "", 15000)); });
+{ const rc = renderCtrl; renderCtrl = function(){ rc(); renderActionBar(); renderOverview(); renderExtras(); }; }
+
+showView((location.hash || "").slice(1) || (() => { try { return localStorage.getItem("k1view"); } catch(e){ return null; } })() || "overview");
+
+/* ================= Démarrage ================= */
+plateFit("objs");
+try { const saved = localStorage.getItem("k1ip"); if (saved) $("ip").value = saved; } catch(e){}
+connect();
+</script>
+</body>
+</html>
