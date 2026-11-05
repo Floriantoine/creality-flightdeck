@@ -915,6 +915,7 @@ const I18N_RULES = [
   [/^(.+) \?$/, (m, a) => { const t = tr(a); return t === a ? m : t + "?"; }],
   [/^Commande : (.+)$/, (m, a) => `Command: ${tr(a)}`], [/^G-code : (.+)$/, "G-code: $1"],
   [/^Régler la buse à (.+) °C$/, "Set the nozzle to $1 °C"], [/^Régler le plateau à (.+) °C$/, "Set the bed to $1 °C"],
+  [/^Non confirmé par l'imprimante : (.+) \(valeur actuelle : (.+)\)$/, (_, a, v) => `Not confirmed by the printer: ${tr(a)} (current value: ${v})`],
   [/^Refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "Refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^✗ refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "✗ refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^Ventilateur (pièce|boîtier|auxiliaire) à (\d+) %$/, (m, a, b) => `${w(a)[0].toUpperCase() + w(a).slice(1)} fan at ${b} %`],
@@ -937,6 +938,7 @@ const I18N_RULES = [
   [/^\(écart ([\d.]+) mm\)$/, "(range $1 mm)"], [/^min (.+) · max (.+) · écart (.+) mm ·$/, "min $1 · max $2 · range $3 mm ·"],
   [/^(\d+) × (\d+) mm · centre (.+)$/, "$1 × $2 mm · center $3"],
   [/^Calculé depuis Z \(compteur de l'imprimante : (.+)\)$/, "Computed from Z (printer counter: $1)"],
+  [/^Estimation \(compteur de l'imprimante : (.+)\)\. Charge le G-code dans la vue Plateau pour la vraie couche\.$/, "Estimate (printer counter: $1). Load the G-code in the Plate view for the real layer."],
   [/^Erreur (\d+)(.*)$/, (m, a, b) => `Error ${a}${b.replace("clé", "key")}`],
   [/^(\d+) bobine\(s\)(.*)$/, (m, a, b) => `${a} spool(s)` + b.replace("humidité", "humidity").replace("recharge auto oui", "auto-refill on").replace("recharge auto non", "auto-refill off")],
   [/^boîtier : (.+) · humidité (.+)$/, "box: $1 · humidity $2"],
@@ -1187,8 +1189,14 @@ function renderMain(){
     $("layer").textContent = `${rl} / ${G.layers.length}`;
     $("layer").title = `Calculé depuis Z (compteur de l'imprimante : ${data.layer ?? "?"} / ${data.TotalLayer ?? "?"})`;
   } else {
-    $("layer").textContent = data.TotalLayer ? `${data.layer ?? 0} / ${data.TotalLayer}` : "—";
-    $("layer").title = num(data.layer) > num(data.TotalLayer) ? "Le compteur de l'imprimante dépasse le total : charge le G-code pour avoir la vraie couche" : "";
+    // Sans G-code : le compteur de l'imprimante compte chaque couche en double (ex. 326 / 163 à la fin).
+    // On le détecte (dépasse le total, ou très en avance sur la progression) et on divise par 2.
+    const raw = num(data.layer), tot = num(data.TotalLayer), pr = num(data.printProgress);
+    const doubled = raw !== null && tot && (raw > tot || (pr !== null && pr < 95 && raw / tot > pr / 100 + 0.25 && raw / tot > 0.1));
+    if (!tot) $("layer").textContent = "—";
+    else if (doubled) $("layer").textContent = `≈ ${Math.min(tot, Math.round(raw / 2))} / ${tot}`;
+    else $("layer").textContent = `${raw ?? 0} / ${tot}`;
+    $("layer").title = doubled ? `Estimation (compteur de l'imprimante : ${raw} / ${tot}). Charge le G-code dans la vue Plateau pour la vraie couche.` : "";
   }
   $("elapsed").textContent = fmtDur(data.printJobTime);
   $("left").textContent = fmtDur(data.printLeftTime);
@@ -1995,7 +2003,7 @@ async function makeCapture(reason){
   g.fillText(tr(reason || "K1 Max").slice(0, 80), 18, 30);
   g.font = "18px Consolas, monospace"; g.fillStyle = "#ffd9c2";
   const rl = gRealLayer();
-  g.fillText(tr(`Buse ${fmtDeg(data.nozzleTemp)}  Plateau ${fmtDeg(data.bedTemp0)}  Enceinte ${fmtDeg(data.boxTemp)}  ·  Couche ${rl ? rl + "/" + G.layers.length : (data.layer ?? "?") + "/" + (data.TotalLayer ?? "?")}  ·  ${new Date().toLocaleTimeString(LOC)}`), 18, 58);
+  g.fillText(tr(`Buse ${fmtDeg(data.nozzleTemp)}  Plateau ${fmtDeg(data.bedTemp0)}  Enceinte ${fmtDeg(data.boxTemp)}  ·  Couche ${rl ? rl + "/" + G.layers.length : $("layer").textContent.replace(/\s/g, "")}  ·  ${new Date().toLocaleTimeString(LOC)}`), 18, 58);
   if (!cam){ g.fillStyle = "#8a919c"; g.font = "14px Segoe UI, sans-serif"; g.fillText(tr("(caméra non disponible)"), W - 190, H + 22); }
   return await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
 }
@@ -2350,7 +2358,7 @@ function ask(title, detail, danger){
 }
 function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString(LOC)}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
 /* Valeurs « en attente » : après un réglage, l'imprimante renvoie encore l'ancienne valeur
-   pendant quelques secondes. On garde la nouvelle affichée jusqu'à confirmation (max 10 s). */
+   pendant quelques secondes. On garde la nouvelle affichée jusqu'à confirmation (max 6 s). */
 const pending = {};
 function expectFrom(params){
   const e = {};
@@ -2366,7 +2374,12 @@ function holdPending(m){
   const now = Date.now();
   for (const k of Object.keys(pending)){
     const p = pending[k];
-    if (now > p.until){ delete pending[k]; continue; }
+    if (now > p.until){
+      delete pending[k];
+      const msg = `Non confirmé par l'imprimante : ${p.label} (valeur actuelle : ${m[k] ?? data[k] ?? "?"})`;
+      toast(msg); cLog(msg, true); sLog(msg, true);
+      continue;
+    }
     if (!(k in m)) continue;
     const v = num(m[k]);
     if (v !== null && Math.abs(v - p.val) <= (p.tol || 0)) delete pending[k];   // confirmé
@@ -2380,7 +2393,7 @@ async function act(label, params, o = {}){
   ws.send(JSON.stringify({method:"set", params}));
   const exp = expectFrom(params);
   if (Object.keys(exp).length){
-    for (const [k, v] of Object.entries(exp)) pending[k] = {val: v, until: Date.now() + 10000, tol: /FanPct$/.test(k) ? 1 : 0};
+    for (const [k, v] of Object.entries(exp)) pending[k] = {val: v, until: Date.now() + 6000, tol: /FanPct$/.test(k) ? 1 : 0, label};
     update({...exp});   // affichage immédiat
   }
   cLog(`${label} → envoyé`); sLog(`Commande : ${label}`);
