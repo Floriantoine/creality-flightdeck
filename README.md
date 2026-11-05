@@ -7,7 +7,7 @@ It gives you a live camera, a G-code plate view, a 3D bed mesh, the CFS, full co
 
 > ⚠️ **Unofficial project, not affiliated with Creality.** You use it at your own risk. Some commands move axes, heat up or delete files. Every physical action asks for a confirmation, but you are still in charge of your machine.
 >
-> 🇫🇷 The interface is currently **in French**. An English translation is on the roadmap.
+> 🌐 The interface is in **English** and **French**. By default it follows your browser's language (English otherwise). You can change it at the bottom of the sidebar: **Language → Auto / English / Français**.
 
 ---
 
@@ -75,6 +75,7 @@ It gives you a live camera, a G-code plate view, a 3D bed mesh, the CFS, full co
 - An alert if the connection drops during a print.
 
 **Quality of life**
+- **English / French interface**: auto-detected, with a setting in the sidebar.
 - **Auto network scan** when the printer's IP changes (DHCP).
 - Responsive layout: sidebar on desktop, stacked on a phone.
 - No install, no server and no account: one HTML file.
@@ -120,7 +121,7 @@ That's it. The IP and all your settings are remembered in the browser.
 
 ## Screenshots
 
-*The screenshots use demo data, and the camera image is a placeholder.*
+*The camera image and the print thumbnail are real (K1 Max). The other values are demo data.*
 
 | | |
 |---|---|
@@ -229,7 +230,6 @@ The full list of requests and commands is in **[docs/API.md](docs/API.md)**.
 
 ## Roadmap
 
-- English UI (i18n)
 - Auto-detect plate size per model (K1/K1C 220 mm, K2 Plus 350 mm…)
 - K2 WebRTC camera
 - Smart plug integration (Shelly/Tasmota) to cut power on alarm

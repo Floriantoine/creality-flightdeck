@@ -295,6 +295,8 @@
   .connbox{border-top:1px solid var(--line);margin-top:8px;padding:12px 4px 0;display:flex;flex-direction:column;gap:8px}
   .connst{display:flex;align-items:center;gap:8px;font-size:12px}
   .connbox input{width:100%;box-sizing:border-box}
+  .langsel{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .langsel select{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 6px;font-size:12px}
   .connbtns{display:flex;gap:6px}.connbtns button{flex:1;padding:6px 8px;font-size:12px}
   .content{flex:1;min-width:0;display:flex;flex-direction:column;min-height:100vh}
   header.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 28px;border-bottom:0}
@@ -436,6 +438,7 @@
     <div class="connst"><span class="dot" id="dot"></span><span id="connTxt">Déconnecté</span></div>
     <input id="ip" value="192.168.0.163" spellcheck="false" title="Adresse IP de l'imprimante" aria-label="Adresse IP de l'imprimante">
     <div class="connbtns"><button id="btn">Connecter</button><button id="scanBtn" title="Cherche l'imprimante sur ton réseau">Scanner</button></div>
+    <label class="langsel"><span>Langue</span><select id="langSel" aria-label="Language"><option value="auto">Auto</option><option value="en">English</option><option value="fr">Français</option></select></label>
   </div>
 </nav>
 
@@ -738,6 +741,253 @@
 <div id="alarmBar"><span id="alarmTxt">ALERTE</span><button id="alarmAck">Couper l'alarme</button></div>
 
 <script>
+/* ================= Langue / Language (i18n) ================= */
+// Interface written in French; this layer translates it to English on the fly (text, tooltips, placeholders,
+// live updates). Setting: Auto (browser language, English fallback) · English · Français.
+const LANG_PREF = (() => { try { return localStorage.getItem("k1lang") || "auto"; } catch(e){ return "auto"; } })();
+const LANG = LANG_PREF === "auto" ? ((navigator.language || "en").toLowerCase().startsWith("fr") ? "fr" : "en") : LANG_PREF;
+const LOC = LANG === "fr" ? "fr-CA" : "en-CA";
+document.documentElement.lang = LANG;
+
+const I18N_DICT = {
+  // Navigation & layout
+  "Vue d'ensemble":"Overview", "Plateau & G-code":"Plate & G-code", "Bed mesh":"Bed mesh", "Contrôle complet":"Full control",
+  "Fichiers":"Files", "Historique":"History", "Console G-code":"G-code console", "Températures":"Temperatures",
+  "Données brutes":"Raw data", "Sécurité & alertes":"Safety & alerts", "Sections":"Sections", "Actions rapides":"Quick actions",
+  "Connecter":"Connect", "Déconnecter":"Disconnect", "Scanner":"Scan", "Déconnecté":"Disconnected", "Connecté":"Connected",
+  "Connexion…":"Connecting…", "Perdu — reconnexion…":"Lost — reconnecting…", "Aucune réponse — scan…":"No answer — scanning…",
+  "Introuvable — imprimante allumée ?":"Not found — is the printer on?", "IP invalide":"Invalid IP",
+  "Adresse IP de l'imprimante":"Printer IP address", "Cherche l'imprimante sur ton réseau":"Find the printer on your network",
+  "Agrandir ›":"Expand ›", "Contrôle complet ›":"Full control ›", "Ouvrir le contrôle complet":"Open full control",
+  "Voir les températures":"See temperatures", "Voir le bed mesh":"See bed mesh", "Voir toutes les données":"See all data",
+  "Voir les données du CFS":"See CFS data", "Sécurité —":"Safety —", "Sécurité — cliquer pour les réglages":"Safety — click for settings",
+  "Langue":"Language",
+  // Header / print
+  "Aucun fichier":"No file", "écoulé":"elapsed", "· reste":"· left", "· fin":"· done at", "· couche":"· layer",
+  "aperçu de l'impression":"print preview", "Inactive":"Idle", "Impression":"Printing", "Terminée":"Finished",
+  "Échec / arrêt":"Failed / stopped", "Annulée":"Cancelled", "Pause":"Pause",
+  "Le compteur de l'imprimante dépasse le total : charge le G-code pour avoir la vraie couche":"The printer's layer counter exceeds the total: load the G-code to get the real layer",
+  // Overview tiles
+  "Buse":"Nozzle", "Plateau":"Bed", "Enceinte":"Chamber", "Plateau · Enceinte":"Bed · Chamber", "· enceinte":"· chamber",
+  "En direct":"Live", "Vitesse":"Speed", "Débit":"Flow", "Hauteur Z":"Z height", "Filament":"Filament",
+  "Ventilateurs":"Fans", "Pièce":"Part", "Boîtier":"Case", "Auxiliaire":"Auxiliary", "Vitesse demandée":"Requested speed",
+  "Aucun maillage":"No mesh", "Caméra non disponible":"Camera unavailable", "(caméra non disponible)":"(camera unavailable)",
+  "vide":"empty", "CFS":"CFS",
+  // Plate
+  "Pièces":"Objects", "Plateau entier":"Whole bed", "Trajet buse":"Nozzle path", "Aucune pièce reçue":"No objects received",
+  "Charger le G-code…":"Load G-code…", "Pour voir la vraie forme des pièces, charge le .gcode (ou glisse-le sur le plateau)":"To see the real shape of the objects, load the .gcode (or drop it on the plate)",
+  "Suivre l'impression":"Follow the print", "Murs":"Walls", "Tout":"All", "Contour extérieur":"Outer wall",
+  "Positions de la buse":"Nozzle positions", "Déjà imprimé":"Already printed", "À venir":"Upcoming", "Relier les points":"Connect the dots",
+  "Molette = zoom · glisser = déplacer · double-clic = recentrer · clic sur une pièce de la liste = zoom dessus":"Wheel = zoom · drag = pan · double-click = re-centre · click an object in the list = zoom on it",
+  "en cours":"printing", "exclue":"excluded", "Exclure":"Exclude", "Ne plus imprimer cette pièce":"Stop printing this object",
+  "avant-gauche":"front-left", "▼ AVANT (porte) ▼":"▼ FRONT (door) ▼", "▼ AVANT ▼":"▼ FRONT ▼", "↙ avant-gauche":"↙ front-left", "AVANT":"FRONT",
+  "Aucune extrusion trouvée dans ce fichier":"No extrusion found in this file",
+  // Bed mesh
+  "Lire l'imprimante":"Read from printer", "Importer…":"Import…", "Essaie de lire le maillage sur l'imprimante":"Try to read the mesh from the printer",
+  "printer.cfg, JSON Moonraker ou texte collé":"printer.cfg, Moonraker JSON or pasted text", "Aucun maillage chargé.":"No mesh loaded.",
+  "Recherche du maillage…":"Looking for the mesh…", "Glisser = tourner · molette = exagération du relief":"Drag = rotate · wheel = exaggerate relief",
+  "Coller un maillage (bloc SAVE_CONFIG du printer.cfg ou réponse JSON)":"Paste a mesh (printer.cfg SAVE_CONFIG block or JSON reply)",
+  "Afficher":"Show", "Min":"Min", "Max":"Max", "Écart total":"Range", "Moyenne":"Mean", "Planéité :":"Flatness:",
+  "Excellent":"Excellent", "Bon":"Good", "Moyen — le maillage compense, mais surveille la 1re couche":"Average — the mesh compensates, but watch the first layer",
+  "Gros écart — vérifie le plateau (vis, déformation, saleté sous la plaque)":"Large deviation — check the bed (screws, warping, dirt under the plate)",
+  "excellent":"excellent", "bon":"good", "moyen":"average", "à vérifier":"check it",
+  "Ton imprimante n'expose pas le maillage en direct (firmware d'origine). Importe ton printer.cfg ou colle le bloc [bed_mesh] ci-dessous.":"Your printer doesn't expose the mesh live (stock firmware). Import your printer.cfg or paste the [bed_mesh] block below.",
+  "Maillage illisible (grille vide ou incomplète)":"Unreadable mesh (empty or incomplete grid)", "Aucun maillage reconnu dans le texte collé":"No mesh recognised in the pasted text",
+  "relief":"relief",
+  // Control
+  "Contrôle":"Control", "⏸ Pause":"⏸ Pause", "▶ Reprendre":"▶ Resume", "⏹ Arrêter":"⏹ Stop", "Reprendre":"Resume", "Arrêter":"Stop",
+  "Lumière":"Light", "Régler":"Set", "❄ Tout refroidir":"❄ Cool down", "Met buse et plateau à 0 °C":"Sets nozzle and bed to 0 °C",
+  "Ventilateurs & vitesse":"Fans & speed", "Z offset (en direct)":"Z offset (live)", "Enregistrer":"Save",
+  "Enregistre le Z offset dans l'imprimante":"Saves the Z offset in the printer", "− rapproche la buse du plateau · + l'éloigne":"− brings the nozzle closer to the bed · + moves it away",
+  "Déplacements":"Moves", "Pas":"Step", "⌂ Origine complète":"⌂ Home all", "⌂ XY":"⌂ XY", "⌂ Z":"⌂ Z", "Origine X Y":"Home X Y", "Origine Z":"Home Z",
+  "▲ Plateau":"▲ Bed", "▼ Plateau":"▼ Bed", "Z diminue : le plateau monte vers la buse":"Z decreases: the bed rises towards the nozzle", "Z augmente : le plateau descend":"Z increases: the bed goes down",
+  "X moins":"X minus", "X plus":"X plus", "Y moins (vers l'avant)":"Y minus (towards the front)", "Y plus (vers l'arrière)":"Y plus (towards the back)",
+  "Sur la K1, c'est le plateau qui bouge en Z. Déplacements bloqués pendant une impression ; fais l'origine avant de déplacer.":"On the K1 the bed moves in Z. Moves are blocked while printing; home before moving.",
+  "Slot":"Slot", "Charger":"Load", "Décharger":"Unload", "Recharge auto":"Auto-refill", "Séchage":"Drying", "Démarrer":"Start",
+  "Commandes documentées par la communauté (testées sur K1C) — essaie d'abord sans impression en cours.":"Commands documented by the community (tested on a K1C) — try them first with no print running.",
+  "Maintenance":"Maintenance", "Reprendre après coupure":"Resume after power loss", "Reprendre une impression interrompue par une coupure de courant":"Resume a print interrupted by a power loss",
+  "Redémarrer Klipper":"Restart Klipper", "Redémarrer le firmware":"Restart firmware", "Effacer le bed mesh":"Clear bed mesh", "Effacer l'erreur":"Clear error",
+  "Annuler":"Cancel", "Confirmer":"Confirm", "Nouveau nom":"New name",
+  // Confirmations, details, toasts
+  "La buse se range et l'impression attend.":"The nozzle parks and the print waits.",
+  "L'impression en cours sera annulée. On ne peut pas la reprendre ensuite.":"The current print will be cancelled. It can't be resumed afterwards.",
+  "Cette pièce ne sera plus imprimée. On ne peut pas revenir en arrière.":"This object will no longer be printed. This can't be undone.",
+  "Vérifie que le plateau est vide et propre.":"Make sure the bed is empty and clean.", "Le fichier sera effacé de l'imprimante.":"The file will be deleted from the printer.",
+  "Un fichier du même nom sera remplacé.":"A file with the same name will be replaced.", "La connexion va couper quelques secondes.":"The connection will drop for a few seconds.",
+  "Toute impression en cours sera perdue.":"Any print in progress will be lost.", "Il faudra refaire un nivellement automatique.":"You'll need to run an auto-level again.",
+  "À utiliser seulement si l'écran propose de reprendre une impression interrompue.":"Use only if the screen offers to resume an interrupted print.",
+  "Le boîtier du CFS va chauffer. Arrête-le quand c'est fini.":"The CFS box will heat up. Stop it when you're done.",
+  "La buse va se rapprocher du plateau.":"The nozzle will move closer to the bed.", "Le plateau va monter vers la buse.":"The bed will rise towards the nozzle.",
+  "Le plateau va monter jusqu'au capteur.":"The bed will rise up to the sensor.", "Une impression est en cours !":"A print is running!",
+  "Cette commande redémarre ou arrête l'imprimante.":"This command restarts or stops the printer.", "Commande G-code envoyée directement à l'imprimante.":"G-code command sent straight to the printer.",
+  "Pas connecté à l'imprimante":"Not connected to the printer", "Température invalide":"Invalid temperature", "Seulement des fichiers .gcode":"Only .gcode files",
+  "Ce fichier est en cours d'impression":"This file is being printed", "Le nom ne peut pas contenir / : ;":"The name can't contain / : ;",
+  "Déplacement bloqué : une impression est en cours":"Move blocked: a print is running", "Limite : ±0,5 mm de changement par session":"Limit: ±0.5 mm change per session",
+  "Température de séchage entre 1 et 65 °C":"Drying temperature between 1 and 65 °C", "JSON copié":"JSON copied", "Aucune imprimante trouvée sur le réseau":"No printer found on the network",
+  "Mettre l'impression en pause":"Pause the print", "Reprendre l'impression":"Resume the print", "ARRÊTER l'impression":"STOP the print",
+  "Allumer la lumière":"Turn the light on", "Éteindre la lumière":"Turn the light off", "Refroidir la buse":"Cool the nozzle", "Refroidir le plateau":"Cool the bed",
+  "Enregistrer le Z offset":"Save the Z offset", "Origine complète (X Y Z)":"Home all (X Y Z)", "Arrêter le séchage du CFS":"Stop CFS drying",
+  "Activer la recharge auto du CFS":"Enable CFS auto-refill", "Désactiver la recharge auto du CFS":"Disable CFS auto-refill",
+  "Reprendre l'impression après la coupure":"Resume the print after the power loss", "Effacer le bed mesh enregistré":"Clear the saved bed mesh",
+  "Retirer cette impression de l'historique":"Remove this print from history", "Une impression est en cours":"A print is running",
+  // Files / history / console
+  "Fichiers sur l'imprimante":"Files on the printer", "Rafraîchir":"Refresh", "Envoyer un G-code…":"Upload a G-code…", "Glisse un fichier":"Drop a",
+  "ici pour l'envoyer à l'imprimante":"file here to upload it to the printer", "Filtrer par nom…":"Filter by name…", "Chargement…":"Loading…",
+  "Nom":"Name", "Taille":"Size", "Couches":"Layers", "Date":"Date", "Imprimer":"Print", "Renommer":"Rename", "Supprimer":"Delete",
+  "Aucun fichier reçu. Clique « Rafraîchir ».":"No files received. Click “Refresh”.", "Historique des impressions":"Print history",
+  "Fichier":"File", "Début":"Start", "Durée":"Duration", "État":"Status", "Retirer":"Remove", "✓ terminée":"✓ finished", "✗ échec":"✗ failed", "✗ annulée":"✗ cancelled",
+  "Aucun historique reçu. Clique « Rafraîchir ».":"No history received. Click “Refresh”.",
+  "Les commandes sont envoyées telles quelles à Klipper (gcodeCmd). L'imprimante ne renvoie pas de réponse texte : regarde l'effet dans les données.":"Commands are sent as-is to Klipper (gcodeCmd). The printer doesn't send a text reply back: check the effect in the data.",
+  "ex. M115, G28, M84…":"e.g. M115, G28, M84…", "Commande G-code":"G-code command", "Envoyer":"Send", "M84 · moteurs off":"M84 · motors off",
+  "G28 · origine":"G28 · home", "Ventilo pièce off":"Part fan off", "Buse 0 °C":"Nozzle 0 °C", "Plateau 0 °C":"Bed 0 °C",
+  "Ne plus demander de confirmation (cette session)":"Don't ask for confirmation again (this session)", "✗ pas connecté":"✗ not connected",
+  // Temperatures view
+  "Températures — 10 dernières minutes":"Temperatures — last 10 minutes", "10 dernières minutes":"last 10 minutes",
+  // Raw data
+  "Toutes les données":"All data", "Rechercher (ex. fan, cfs, temp)…":"Search (e.g. fan, cfs, temp)…", "Clés brutes":"Raw keys", "Qui bougent":"Changing",
+  "Copier le JSON":"Copy JSON", "Oui":"Yes", "Non":"No", "liste vide":"empty list",
+  "CFS / Filament":"CFS / Filament", "Ventilateurs & lumière":"Fans & light", "Mouvement":"Motion", "Système & réseau":"System & network", "Autres":"Other",
+  // Field labels
+  "Buse — cible":"Nozzle — target", "Buse — max":"Nozzle — max", "Plateau — cible":"Bed — target", "Plateau — max":"Bed — max", "Enceinte — cible":"Chamber — target",
+  "Plateau zone 2":"Bed zone 2", "Plateau zone 3":"Bed zone 3", "Plateau zone 2 — cible":"Bed zone 2 — target", "Plateau zone 3 — cible":"Bed zone 3 — target",
+  "État de l'appareil":"Device state", "Progression":"Progress", "Progression (détaillée)":"Progress (detailed)", "Couche actuelle":"Current layer", "Couches totales":"Total layers",
+  "Temps écoulé":"Elapsed time", "Temps restant":"Time left", "Début de l'impression":"Print start", "Filament utilisé":"Filament used", "Vitesse réelle":"Actual speed",
+  "Débit réel":"Actual flow", "Vitesse (%)":"Speed (%)", "Débit (%)":"Flow (%)", "Position":"Position", "Origine faite":"Homed",
+  "Ventilateur pièce":"Part fan", "Ventilateur boîtier":"Case fan", "Ventilateur auxiliaire":"Auxiliary fan", "Ventilateur pièce (%)":"Part fan (%)",
+  "Ventilateur boîtier (%)":"Case fan (%)", "Ventilateur auxiliaire (%)":"Auxiliary fan (%)", "Nom d'hôte":"Hostname", "Modèle":"Model", "Version firmware":"Firmware version",
+  "Erreur":"Error", "Caméra":"Camera", "Caméra 2":"Camera 2", "WebRTC":"WebRTC", "Détection IA":"AI detection", "Détection IA (état)":"AI detection (state)",
+  "Détection filament":"Filament detection", "État du filament":"Filament state", "CFS connecté":"CFS connected", "Auto-test activé":"Self-test enabled", "Auto-test":"Self-test",
+  "Mise à jour":"Update", "Impressions totales":"Total prints", "Reprise après coupure":"Power-loss recovery", "Pièces sur le plateau":"Objects on the plate",
+  "Pièce en cours":"Current object", "Pièces exclues":"Excluded objects", "Maillage du plateau":"Bed mesh", "Résultat du nivellement":"Levelling result",
+  "Pressure advance":"Pressure advance", "Smooth time (PA)":"Smooth time (PA)", "Vitesse max":"Max velocity", "Accélération max":"Max acceleration",
+  "Accel → décel max":"Max accel → decel", "Square corner velocity":"Square corner velocity", "Carte SD":"SD card", "Coupure de courant":"Power loss",
+  "IA : 1re couche":"AI: first layer", "IA : pause auto":"AI: auto pause", "Alimentation filament":"Filament feed", "Timelapse":"Timelapse",
+  "Timelapse : images/s":"Timelapse: frames/s", "Timelapse : intervalle":"Timelapse: interval", "Photo au déplacement":"Snapshot on move",
+  "PID auto plateau":"Bed auto PID", "PID auto buse":"Nozzle auto PID", "ID d'impression":"Print ID", "Connecté ":"Connected ",
+  "CFS — bobines":"CFS — spools", "CFS — réglages":"CFS — settings", "Recharge automatique":"Auto-refill", "Chargement auto":"Auto-feed",
+  "Auto-test CFS":"CFS self-test", "Mise à jour auto du filament":"Filament auto-update", "Historique ":"History ", "Fichiers (liste)":"Files (list)",
+  // Safety & alerts
+  "Sécurité":"Safety", "Surveillance active":"Monitoring on", "En attente de données…":"Waiting for data…", "Buse max":"Nozzle max", "Plateau max":"Bed max",
+  "Pendant":"For", "Arrêter l'impression":"Stop the print", "Couper les chauffes":"Cut the heaters", "Alarme sonore":"Sound alarm",
+  "Alerte si connexion perdue pendant une impression":"Alert if the connection drops during a print", "Tester l'alarme (n'arrête rien)":"Test the alarm (stops nothing)",
+  "Couper l'alarme / réarmer":"Silence alarm / re-arm", "Couper l'alarme":"Silence alarm", "Surveillance désactivée":"Monitoring off",
+  "Surveillance activée":"Monitoring enabled", "Surveillance DÉSACTIVÉE":"Monitoring DISABLED", "Alarme coupée, surveillance réarmée":"Alarm silenced, monitoring re-armed",
+  "Alarme coupée — reste déclenchée tant que la température est au-dessus de la limite":"Alarm silenced — stays triggered while the temperature is above the limit",
+  "Test de l'alarme (aucune commande envoyée)":"Alarm test (no command sent)", "⚠ TEST — ceci est un test, rien n'a été envoyé à l'imprimante":"⚠ TEST — this is a test, nothing was sent to the printer",
+  "⚠ Connexion perdue pendant l'impression : la surveillance ne voit plus l'imprimante":"⚠ Connection lost during the print: monitoring can't see the printer anymore",
+  "Plus de données depuis 20 s pendant une impression — surveillance impossible":"No data for 20 s during a print — monitoring impossible",
+  "ALERTE":"ALERT", "⚠ ALERTE — K1 Max":"⚠ ALERT — K1 Max", "🛡 ALERTE":"🛡 ALERT", "🛡 Attention":"🛡 Warning", "🛡 Désactivée":"🛡 Disabled", "🛡 Active":"🛡 Active",
+  "arrêt envoyé":"stop sent", "arrêt NON envoyé (déconnecté)":"stop NOT sent (disconnected)", "coupure des chauffes envoyée":"heater cut-off sent",
+  "coupure des chauffes NON envoyée (déconnecté)":"heater cut-off NOT sent (disconnected)", "aucune action":"no action",
+  "Alertes sur ton téléphone":"Alerts on your phone", "Mon serveur (URL du dossier k1-alertes)":"My server (URL of the k1-alertes folder)",
+  "Jeton du serveur (dans config.php)":"Server token (in config.php)", "Et/ou ntfy.sh (laisser le sujet vide pour ne pas l'utiliser) :":"And/or ntfy.sh (leave the topic empty to not use it):",
+  "Sujet ntfy (comme un mot de passe)":"ntfy topic (like a password)", "Courriel (optionnel)":"E-mail (optional)", "SMS par courriel (optionnel)":"SMS via e-mail (optional)",
+  "Joindre une capture (caméra + plateau + températures)":"Attach a snapshot (camera + plate + temperatures)", "Envoyer une alerte test (priorité max)":"Send a test alert (max priority)",
+  "Aperçu de la capture":"Snapshot preview", "Envoi…":"Sending…", "Capture…":"Capturing…", "Configure ton serveur ou un sujet ntfy d'abord":"Set up your server or an ntfy topic first",
+  "Aperçu ouvert dans un nouvel onglet":"Preview opened in a new tab", "Bloqué par le navigateur : autorise les fenêtres pop-up":"Blocked by the browser: allow pop-ups",
+  "K1 Max - test":"K1 Max - test", "Test des alertes du tableau de bord K1 Max. Si tu lis ceci, ça marche.":"Test alert from the K1 Max dashboard. If you can read this, it works.",
+  "K1 Max - ALERTE TEMPERATURE":"K1 Max - TEMPERATURE ALERT", "K1 Max - connexion perdue":"K1 Max - connection lost",
+  "Le tableau de bord ne recoit plus de donnees de l'imprimante depuis 20 s pendant une impression. Va verifier.":"The dashboard hasn't received data from the printer for 20 s during a print. Go check.",
+  "K1 Max — ALERTE":"K1 Max — ALERT", "Aperçu":"Preview",
+};
+
+const I18N_WORD = {"Buse":"Nozzle", "Plateau":"Bed", "pièce":"part", "boîtier":"case", "auxiliaire":"auxiliary"};
+const w = s => I18N_WORD[s] || s;
+const I18N_RULES = [
+  [/^Couche (\d+) \/ (\d+) · Z ([\d.]+)$/, "Layer $1 / $2 · Z $3"],
+  [/^(.+) — cliquer pour les réglages$/, (m, a) => `${tr(a)} — click for settings`],
+  [/^(\d+) couches · (.+) segments · (\d+) pièce\(s\)$/, "$1 layers · $2 segments · $3 object(s)"],
+  [/^(\d+) \/ (\d+) champs$/, "$1 / $2 fields"], [/^(\d+) champs$/, "$1 fields"],
+  [/^(\d+) champ(s?)$/, "$1 field$2"], [/^(\d+) élément(s?)$/, "$1 item$2"], [/^(\d+) points$/, "$1 points"],
+  [/^cible (.+)$/, "target $1"],
+  [/^Active · buse (\S+) °C · plateau (\S+) °C$/, "Active · nozzle $1 °C · bed $2 °C"],
+  [/^Active · (.+)$/, "Active · $1"],
+  [/^(Buse|Plateau) à ([\d.]+) °C \(limite (\d+) °C\) — action dans ([\d.]+) s$/, (m, a, b, c, d) => `${w(a)} at ${b} °C (limit ${c} °C) — action in ${d} s`],
+  [/^(Buse|Plateau) à ([\d.]+) °C pendant plus de (\d+) s$/, (m, a, b, c) => `${w(a)} at ${b} °C for more than ${c} s`],
+  [/^(Buse|Plateau) à ([\d.]+) °C ≥ (\d+) °C — compte à rebours$/, (m, a, b, c) => `${w(a)} at ${b} °C ≥ ${c} °C — countdown`],
+  [/^(Buse|Plateau) redescendue sous (\d+) °C — fausse alerte annulée$/, (m, a, b) => `${w(a)} back below ${b} °C — false alarm cancelled`],
+  [/^DÉCLENCHÉ : (.+?) → (.+)$/, (m, a, b) => `TRIGGERED: ${tr(a)} → ${b.split(", ").map(tr).join(", ")}`],
+  [/^DÉCLENCHÉE — (.+)$/, (m, a) => `TRIGGERED — ${tr(a)}`],
+  [/^⚠ (.+?) — (.+)$/, (m, a, b) => `⚠ ${tr(a)} — ${b.split(", ").map(tr).join(", ")}`],
+  [/^⚠ (.+)$/, (m, a) => `⚠ ${tr(a)}`],
+  [/^(.+?)\. (arrêt.+|coupure.+)\.$/, (m, a, b) => `${tr(a)}. ${b.split(", ").map(tr).join(", ")}.`],
+  [/^(.+) → envoyé$/, (m, a) => `${tr(a)} → sent`], [/^(.+) — annulé$/, (m, a) => `${tr(a)} — cancelled`],
+  [/^(.+) \?$/, (m, a) => { const t = tr(a); return t === a ? m : t + "?"; }],
+  [/^Commande : (.+)$/, (m, a) => `Command: ${tr(a)}`], [/^G-code : (.+)$/, "G-code: $1"],
+  [/^Régler la buse à (.+) °C$/, "Set the nozzle to $1 °C"], [/^Régler le plateau à (.+) °C$/, "Set the bed to $1 °C"],
+  [/^Refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "Refused: $1 °C ≥ safety limit ($2 °C)"],
+  [/^✗ refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "✗ refused: $1 °C ≥ safety limit ($2 °C)"],
+  [/^Ventilateur (pièce|boîtier|auxiliaire) à (\d+) %$/, (m, a, b) => `${w(a)[0].toUpperCase() + w(a).slice(1)} fan at ${b} %`],
+  [/^Vitesse d'impression à (\d+) %$/, "Print speed at $1 %"], [/^Déplacer (\w) de (.+) mm$/, "Move $1 by $2 mm"],
+  [/^Z offset (.+) mm$/, "Z offset $1 mm"], [/^Changement de cette session : (.+) mm\.$/, "Change this session: $1 mm."], [/^\(changement : (.+) mm\)$/, "(change: $1 mm)"],
+  [/^Lancer l'impression de « (.+) »$/, "Start printing “$1”"], [/^Supprimer « (.+) »$/, "Delete “$1”"], [/^Renommer en « (.+) »$/, "Rename to “$1”"],
+  [/^Exclure « (.+) »$/, "Exclude “$1”"], [/^Envoyer « (.+) » \((.+)\) à l'imprimante \?$/, "Upload “$1” ($2) to the printer?"], [/^Envoyer « (.+) » \?$/, "Send “$1”?"],
+  [/^Charger le slot (.+)$/, "Load slot $1"], [/^Décharger le slot (.+)$/, "Unload slot $1"], [/^Sécher le CFS à (.+) °C$/, "Dry the CFS at $1 °C"],
+  [/^Fichier envoyé : (.+)$/, "File uploaded: $1"], [/^— envoi en cours…$/, "— uploading…"], [/^— envoyé, vérification…$/, "— uploaded, checking…"],
+  [/^— ✓ (.+) est sur l'imprimante$/, "— ✓ $1 is on the printer"], [/^— envoi fait, mais pas encore visible dans la liste \(rafraîchis\)$/, "— uploaded, but not in the list yet (refresh)"],
+  [/^— échec : (.+)$/, "— failed: $1"],
+  [/^(\d+) impressions · (.+) d'impression au total$/, "$1 prints · $2 of printing in total"], [/^état (.+)$/, "state $1"],
+  [/^Imprimante trouvée : (.+)$/, "Printer found: $1"], [/^Scan (\S+) — (.+)$/, "Scanning $1 — $2"],
+  [/^Lecture de (.+?)… (\d+) %$/, "Reading $1… $2 %"], [/^(.+) · (\d+) couches · (.+) pièce\(s\)$/, "$1 · $2 layers · $3 object(s)"],
+  [/^⚠ (.+) ≠ fichier en impression \((.+)\)$/, "⚠ $1 ≠ file being printed ($2)"], [/^Erreur de lecture : (.+)$/, "Read error: $1"],
+  [/^(\d+ × \d+) points · source : (.+)$/, (m, a, b) => `${a} points · source: ${tr(b)}`],
+  [/^imprimante \(reqProbedMatrix\)( \(mémorisé\))?$/, (m, a) => `printer (reqProbedMatrix)${a ? " (saved)" : ""}`],
+  [/^(.+) \(mémorisé\)$/, (m, a) => `${tr(a)} (saved)`], [/^texte collé$/, "pasted text"],
+  [/^Aucun maillage trouvé dans (.+)$/, "No mesh found in $1"], [/^Moonraker \(profil (.+)\)$/, "Moonraker (profile $1)"],
+  [/^\(écart ([\d.]+) mm\)$/, "(range $1 mm)"], [/^min (.+) · max (.+) · écart (.+) mm ·$/, "min $1 · max $2 · range $3 mm ·"],
+  [/^(\d+) × (\d+) mm · centre (.+)$/, "$1 × $2 mm · center $3"],
+  [/^Calculé depuis Z \(compteur de l'imprimante : (.+)\)$/, "Computed from Z (printer counter: $1)"],
+  [/^Erreur (\d+)(.*)$/, (m, a, b) => `Error ${a}${b.replace("clé", "key")}`],
+  [/^(\d+) bobine\(s\)(.*)$/, (m, a, b) => `${a} spool(s)` + b.replace("humidité", "humidity").replace("recharge auto oui", "auto-refill on").replace("recharge auto non", "auto-refill off")],
+  [/^boîtier : (.+) · humidité (.+)$/, "box: $1 · humidity $2"],
+  [/^Alerte à distance : (.+)$/, (m, a) => "Remote alert: " + a.replace(/mon serveur/g, "my server").replace(/ tél\./g, " phones").replace(/courriel/g, "e-mail").replace(/téléphone/g, "phone")],
+  [/^(mon serveur|ntfy|courriel|SMS|téléphone) (.+)$/, (m, a, b) => `${({"mon serveur":"my server", courriel:"e-mail", "téléphone":"phone"})[a] || a} ${b.replace(" tél.", " phones")}`],
+  [/^Capture impossible : (.+)$/, "Snapshot failed: $1"], [/^TEST — (.+)$/, (m, a) => `TEST — ${tr(a)}`],
+  [/^Buse (\S+)  Plateau (\S+)  Enceinte (\S+)  ·  Couche (.+?)  ·  (.+)$/, "Nozzle $1  Bed $2  Chamber $3  ·  Layer $4  ·  $5"],
+  [/^relief ×(.+)$/, "relief ×$1"], [/^(\d+) \/ (\d+) appareil\(s\) ✓(.*)$/, (m, a, b, c) => `${a}/${b} device(s) ✓${c.replace("échec : code", "failed: code")}`],
+  [/^Activé ✓ — (\d+) appareil\(s\) abonné\(s\)$/, "Enabled ✓ — $1 device(s) subscribed"],
+  // Log lines: "<time>  <message>"
+  [/^(\d{1,2}[^ ]* ?h ?\d+ ?min ?\d+ ?s|\d{1,2}:\d{2}:\d{2}(?: ?[ap]\.?m\.?)?)\s{2}(.+)$/i, (m, a, b) => `${a}  ${tr(b)}`],
+];
+
+function tr(s){
+  if (LANG === "fr" || typeof s !== "string" || !s) return s;
+  const t = s.trim(); if (!t) return s;
+  const pre = s.slice(0, s.indexOf(t)), post = s.slice(s.indexOf(t) + t.length);
+  if (Object.prototype.hasOwnProperty.call(I18N_DICT, t)) return pre + I18N_DICT[t] + post;
+  for (const [re, rep] of I18N_RULES){ if (re.test(t)){ const out = t.replace(re, rep); if (out !== t) return pre + out + post; } }
+  return s;
+}
+
+// Translate the DOM, and keep translating as the page updates it
+const I18N_ATTRS = ["title", "placeholder", "aria-label", "alt"];
+function trNode(n){
+  if (n.nodeType === 3){
+    const p = n.parentNode; if (!p || /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.nodeName) || p.closest?.(".key, #gOut, .cout")) return;
+    const v = tr(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v;
+  } else if (n.nodeType === 1){
+    if (/^(SCRIPT|STYLE)$/.test(n.nodeName)) return;
+    for (const a of I18N_ATTRS){ const v = n.getAttribute(a); if (v){ const t2 = tr(v); if (t2 !== v) n.setAttribute(a, t2); } }
+    for (const c of n.childNodes) trNode(c);
+  }
+}
+if (LANG !== "fr"){
+  trNode(document.body);
+  new MutationObserver(ms => {
+    for (const m of ms){
+      if (m.type === "characterData") trNode(m.target);
+      else if (m.type === "attributes") trNode(m.target);
+      else m.addedNodes.forEach(trNode);
+    }
+  }).observe(document.body, {subtree:true, childList:true, characterData:true, attributes:true, attributeFilter:I18N_ATTRS});
+  const ot = document.title; document.title = tr(ot);
+}
+
+// Language selector (sidebar)
+{ const sel = document.getElementById("langSel");
+  if (sel){ sel.value = LANG_PREF; sel.onchange = () => { try { localStorage.setItem("k1lang", sel.value); } catch(e){} location.reload(); }; } }
+
+
 /* ================= Config ================= */
 const PORT = 9999;
 const STATES = {0:["Inactive",""],1:["Impression","printing"],2:["Terminée",""],3:["Échec / arrêt","error"],4:["Annulée","error"],5:["Pause","paused"]};
@@ -1141,7 +1391,7 @@ function formatScalar(k, v){
   if (n !== null){
     if (/temp/i.test(k)) return `${n.toFixed(1)} °C`;
     if (/progress|pct$|percent/i.test(k)) return `${n} %`;
-    if (/StartTime|timestamp/i.test(k) && n > 1e9) return showRawToo(new Date((n > 1e12 ? n : n*1000)).toLocaleString("fr-CA"));
+    if (/StartTime|timestamp/i.test(k) && n > 1e9) return showRawToo(new Date((n > 1e12 ? n : n*1000)).toLocaleString(LOC));
     if (/speed/i.test(k)) return `${n} mm/s`;
     if (/realTimeFlow/i.test(k)) return `${n} mm³/s`;
     if (/time/i.test(k) && !/realTime/i.test(k) && n >= 0 && n < 1e7) return showRawToo(fmtDur(n));
@@ -1498,7 +1748,7 @@ function loadGcode(file){
     $("gSlider").max = d.layers.length;
     gCheckName();
     if (!d.layers.length){ $("gStat").className = "gstat warn"; $("gStat").textContent = "Aucune extrusion trouvée dans ce fichier"; return; }
-    $("gStat").title = `${d.layers.length} couches · ${segs.toLocaleString("fr-CA")} segments · ${d.names.length} pièce(s)`;
+    $("gStat").title = `${d.layers.length} couches · ${segs.toLocaleString(LOC)} segments · ${d.names.length} pièce(s)`;
     gMaxZ = 0;
     gSetLayer(($("gFollow").checked && gRealLayer()) || Math.min(G.layer, d.layers.length));
     renderMain();
@@ -1637,7 +1887,7 @@ const sv = id => { const e = $(id); return e.type === "checkbox" ? e.checked : n
 function sLog(msg, bad){
   const d = document.createElement("div");
   d.className = bad ? "bad" : "";
-  d.textContent = `${new Date().toLocaleTimeString("fr-CA")}  ${msg}`;
+  d.textContent = `${new Date().toLocaleTimeString(LOC)}  ${msg}`;
   $("sLog").prepend(d);
   while ($("sLog").children.length > 50) $("sLog").lastChild.remove();
 }
@@ -1742,16 +1992,17 @@ async function makeCapture(reason){
   // Bandeau d'infos
   g.fillStyle = reason ? "#c62828" : "#1c2027"; g.fillRect(0, 0, W, H);
   g.fillStyle = "#fff"; g.font = "600 24px Segoe UI, sans-serif";
-  g.fillText((reason || "K1 Max").slice(0, 80), 18, 30);
+  g.fillText(tr(reason || "K1 Max").slice(0, 80), 18, 30);
   g.font = "18px Consolas, monospace"; g.fillStyle = "#ffd9c2";
   const rl = gRealLayer();
-  g.fillText(`Buse ${fmtDeg(data.nozzleTemp)}  Plateau ${fmtDeg(data.bedTemp0)}  Enceinte ${fmtDeg(data.boxTemp)}  ·  Couche ${rl ? rl + "/" + G.layers.length : (data.layer ?? "?") + "/" + (data.TotalLayer ?? "?")}  ·  ${new Date().toLocaleTimeString("fr-CA")}`, 18, 58);
-  if (!cam){ g.fillStyle = "#8a919c"; g.font = "14px Segoe UI, sans-serif"; g.fillText("(caméra non disponible)", W - 190, H + 22); }
+  g.fillText(tr(`Buse ${fmtDeg(data.nozzleTemp)}  Plateau ${fmtDeg(data.bedTemp0)}  Enceinte ${fmtDeg(data.boxTemp)}  ·  Couche ${rl ? rl + "/" + G.layers.length : (data.layer ?? "?") + "/" + (data.TotalLayer ?? "?")}  ·  ${new Date().toLocaleTimeString(LOC)}`), 18, 58);
+  if (!cam){ g.fillStyle = "#8a919c"; g.font = "14px Segoe UI, sans-serif"; g.fillText(tr("(caméra non disponible)"), W - 190, H + 22); }
   return await new Promise(res => c.toBlob(res, "image/jpeg", 0.85));
 }
 const blobToDataUrl = b => new Promise(res => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(b); });
 
 async function remoteNotify(title, body, isTest){
+  title = tr(title); body = tr(body);
   const topic = $("rTopic").value.trim(), srv = $("rUrl").value.trim().replace(/\/+$/, ""), stok = $("rTok").value.trim();
   if (!topic && !srv){ if (isTest) $("rStat").textContent = "Configure ton serveur ou un sujet ntfy d'abord"; return; }
   let img = null;
@@ -1809,7 +2060,7 @@ let audioCtx = null, beepTimer = null;
 function alarm(txt){
   S.alarm = true;
   $("alarmTxt").textContent = txt; $("alarmBar").style.display = "flex"; $("sAck").classList.remove("hide");
-  document.title = "⚠ ALERTE — K1 Max";
+  document.title = tr("⚠ ALERTE — K1 Max");
   if (sv("sSound")){
     try {
       audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
@@ -1820,7 +2071,7 @@ function alarm(txt){
       beep(); clearInterval(beepTimer); beepTimer = setInterval(beep, 1000);
     } catch(e){}
   }
-  try { if ("Notification" in window && Notification.permission === "granted") new Notification("K1 Max — ALERTE", {body: txt.replace(/^⚠ /, ""), requireInteraction: true}); } catch(e){}
+  try { if ("Notification" in window && Notification.permission === "granted") new Notification(tr("K1 Max — ALERTE"), {body: tr(txt).replace(/^⚠ /, ""), requireInteraction: true}); } catch(e){}
 }
 function ack(){
   S.alarm = false; clearInterval(beepTimer);
@@ -1908,8 +2159,8 @@ function meshDraw(){
   g.strokeStyle = "#f5b942"; g.lineWidth = 3;
   g.beginPath(); g.moveTo(pad + 1, gy - Math.min(ch*.6, 18)); g.lineTo(pad + 1, gy - 1); g.lineTo(pad + Math.min(cw*.6, 18), gy - 1); g.stroke();
   g.fillStyle = "#f5b942"; g.font = "600 11px Segoe UI, sans-serif"; g.textAlign = "center";
-  g.fillText("▼ AVANT ▼", pad + cols*cw/2 + 20, gy + 8);
-  g.textAlign = "left"; g.fillText("↙ avant-gauche", pad - 4, gy + 8);
+  g.fillText(tr("▼ AVANT ▼"), pad + cols*cw/2 + 20, gy + 8);
+  g.textAlign = "left"; g.fillText(tr("↙ avant-gauche"), pad - 4, gy + 8);
   g.fillStyle = "#8a919c"; g.font = "10px ui-monospace, Consolas, monospace";
   g.textAlign = "right"; g.fillText(`X ${M.min[0]}→${M.max[0]}`, S - 6, S - 4);
   g.textAlign = "left";
@@ -1944,9 +2195,9 @@ function meshDraw(){
   q.beginPath(); q.arc(fl[0], fl[1], 6, 0, Math.PI*2); q.fill(); q.stroke();
   q.font = "600 12px Segoe UI, sans-serif"; q.textAlign = "center";
   const lx = Math.max(42, Math.min(S3 - 42, fl[0])), ly = Math.min(S3 - 6, fl[1] + 20);
-  q.strokeText("avant-gauche", lx, ly); q.fillText("avant-gauche", lx, ly);
+  q.strokeText(tr("avant-gauche"), lx, ly); q.fillText(tr("avant-gauche"), lx, ly);
   const fm = [(fl[0] + fr[0])/2, (fl[1] + fr[1])/2];
-  q.strokeText("AVANT", fm[0], fm[1] + 22); q.fillText("AVANT", fm[0], fm[1] + 22);
+  q.strokeText(tr("AVANT"), fm[0], fm[1] + 22); q.fillText(tr("AVANT"), fm[0], fm[1] + 22);
   q.textAlign = "left";
 
   // --- Chiffres ---
@@ -2096,7 +2347,7 @@ function ask(title, detail, danger){
     setTimeout(() => $("askNo").focus(), 0);
   });
 }
-function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString("fr-CA")}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
+function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString(LOC)}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
 async function act(label, params, o = {}){
   if (!ws || ws.readyState !== 1){ toast("Pas connecté à l'imprimante"); return false; }
   if (o.confirm && !(await ask(label + " ?", o.detail, o.danger))) { cLog(`${label} — annulé`); return false; }
@@ -2175,7 +2426,7 @@ function renderCtrl(){
 const wsGet = k => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({method:"get", params:{[k]:1}})); };
 const ipBase = () => `http://${$("ip").value.trim()}`;
 const fmtSize = n => { n = num(n); if (n === null) return "—"; return n > 1048576 ? (n/1048576).toFixed(1) + " Mo" : (n/1024).toFixed(0) + " Ko"; };
-const fmtDate = t => { t = num(t); if (!t) return "—"; if (t < 1e12) t *= 1000; return new Date(t).toLocaleString("fr-CA", {dateStyle:"short", timeStyle:"short"}); };
+const fmtDate = t => { t = num(t); if (!t) return "—"; if (t < 1e12) t *= 1000; return new Date(t).toLocaleString(LOC, {dateStyle:"short", timeStyle:"short"}); };
 
 // Petite fenêtre avec un champ texte (pour renommer)
 function askInput(title, value){
@@ -2427,7 +2678,7 @@ function renderOverview(){
   renderCfs();
   // Heure de fin estimée
   const lt = num(data.printLeftTime);
-  $("eta").textContent = lt && num(data.state) === 1 ? new Date(Date.now() + lt*1000).toLocaleTimeString("fr-CA", {hour:"2-digit", minute:"2-digit"}) : "—";
+  $("eta").textContent = lt && num(data.state) === 1 ? new Date(Date.now() + lt*1000).toLocaleTimeString(LOC, {hour:"2-digit", minute:"2-digit"}) : "—";
   // Ventilateurs
   const f = k => num(data[k]) === null ? "—" : num(data[k]) + " %";
   const used = num(data.usedMaterialLength);
