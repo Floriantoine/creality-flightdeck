@@ -11,6 +11,10 @@ check_token($in);
 $sub = $in['subscription'] ?? null;
 if (!is_array($sub) || empty($sub['endpoint']) || !preg_match('#^https://#', $sub['endpoint']))
     out(400, ['error' => 'Abonnement invalide']);
+// Seulement les services push des navigateurs (empêche d'utiliser le serveur pour contacter d'autres adresses)
+$host = strtolower(parse_url($sub['endpoint'], PHP_URL_HOST) ?: '');
+if (!preg_match('/(^|\.)(fcm\.googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com|push\.apple\.com)$/', $host))
+    out(400, ['error' => 'Service push non reconnu']);
 
 $subs = jread('subs.json', []);
 $id = substr(sha1($sub['endpoint']), 0, 16);

@@ -829,7 +829,7 @@ const I18N_DICT = {
   "Enregistrer le Z offset":"Save the Z offset", "Origine complète (X Y Z)":"Home all (X Y Z)", "Arrêter le séchage du CFS":"Stop CFS drying",
   "Activer la recharge auto du CFS":"Enable CFS auto-refill", "Désactiver la recharge auto du CFS":"Disable CFS auto-refill",
   "Reprendre l'impression après la coupure":"Resume the print after the power loss", "Effacer le bed mesh enregistré":"Clear the saved bed mesh",
-  "Retirer cette impression de l'historique":"Remove this print from history", "Une impression est en cours":"A print is running",
+  "Retirer cette impression de l'historique":"Remove this print from history", "Attention : ton serveur d'alertes est en http:// — le jeton passe en clair. Utilise https://":"Warning: your alert server uses http:// — the token is sent in clear text. Use https://", "Une impression est en cours":"A print is running",
   // Files / history / console
   "Fichiers sur l'imprimante":"Files on the printer", "Rafraîchir":"Refresh", "Envoyer un G-code…":"Upload a G-code…", "Glisse un fichier":"Drop a",
   "ici pour l'envoyer à l'imprimante":"file here to upload it to the printer", "Filtrer par nom…":"Filter by name…", "Chargement…":"Loading…",
@@ -2008,6 +2008,7 @@ async function remoteNotify(title, body, isTest){
   let img = null;
   if ($("rImg").checked){ try { img = await withTimeout(makeCapture(isTest ? "TEST — " + body.slice(0, 60) : title.replace(/^K1 Max - /, "")), 8000); } catch(e){ sLog("Capture impossible : " + e.message, true); } }
   const jobs = [];
+  if (srv && /^http:\/\//i.test(srv)) sLog("Attention : ton serveur d'alertes est en http:// — le jeton passe en clair. Utilise https://", true);
   // 1) Ton serveur cPanel (push Android + courriels + SMS configurés dans config.php)
   if (srv){
     jobs.push(["mon serveur", (async () => fetch(`${srv}/send.php`, {method:"POST", headers:{"Content-Type":"application/json"},
@@ -2050,7 +2051,7 @@ $("rPrev").onclick = async () => {
 };
 let topicSaved = false; try { topicSaved = localStorage.getItem("k1r_rTopic") !== null; } catch(e){}
 if (!topicSaved && !$("rTopic").value){
-  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(5)), b => b.toString(36).padStart(2,"0")).join("").slice(0,8);
+  const rnd = Array.from(crypto.getRandomValues(new Uint8Array(12)), b => "abcdefghijkmnpqrstuvwxyz23456789"[b % 32]).join("").slice(0,16);
   $("rTopic").value = `k1max-${rnd}`;
   try { localStorage.setItem("k1r_rTopic", $("rTopic").value); } catch(e){}
 }
@@ -2460,7 +2461,7 @@ function renderFiles(){
   if (!FILES.length){ $("fList").innerHTML = `<div class="empty">Aucun fichier reçu. Clique « Rafraîchir ».</div>`; return; }
   $("fList").innerHTML = `<div class="frow fhead"><span></span><span>Nom</span><span>Taille</span><span>Couches</span><span>Filament</span><span>Date</span><span></span></div>` +
     list.map((f, i) => `<div class="frow" data-i="${FILES.indexOf(f)}">
-      <img loading="lazy" alt="" src="${ipBase()}/downloads/humbnail/${encodeURIComponent(f.thumb)}" onerror="this.onerror=null;this.src='${ipBase()}/downloads/defData/${encodeURIComponent(f.thumb)}'">
+      <img loading="lazy" alt="" src="${esc(ipBase())}/downloads/humbnail/${encodeURIComponent(f.thumb)}" data-fb="${esc(ipBase())}/downloads/defData/${encodeURIComponent(f.thumb)}" onerror="this.onerror=null;this.src=this.dataset.fb">
       <span class="fname" title="${esc(f.path + "/" + f.name)}">${esc(f.name.replace(/\.gcode$/i, ""))}</span>
       <span>${fmtSize(f.size)}</span><span>${f.layer || "—"}</span><span>${f.len ? f.len.toFixed(2) + " m" : "—"}</span><span>${fmtDate(f.time)}</span>
       <span class="facts"><button data-fa="print" ${printing ? "disabled title='Une impression est en cours'" : ""}>Imprimer</button><button data-fa="ren">Renommer</button><button data-fa="del" class="danger">Supprimer</button></span>
@@ -2551,7 +2552,8 @@ function gOut(t, cls){ const d = document.createElement("div"); d.className = cl
 async function gSend(cmd){
   cmd = cmd.trim(); if (!cmd) return;
   // Respecte les seuils de sécurité pour les commandes de chauffe
-  const m = /^(M104|M109|M140|M190)\b.*?\bS\s*(-?[\d.]+)/i.exec(cmd);
+  const m = /^(M104|M109|M140|M190)\b.*?\bS\s*(-?[\d.]+)/i.exec(cmd)
+         || ((h => h && [null, /bed/i.test(h[1]) ? "M140" : "M104", h[2]])(/^SET_HEATER_TEMPERATURE\b.*?\bHEATER=(\S+).*?\bTARGET=\s*(-?[\d.]+)/i.exec(cmd)));
   if (m){
     const bed = /M140|M190/i.test(m[1]), v = +m[2], lim = bed ? (sv("sBed") || 110) : (sv("sNoz") || 300);
     if (v >= lim){ gOut(`✗ refusé : ${v} °C ≥ limite de sécurité (${lim} °C)`, "bad"); return; }

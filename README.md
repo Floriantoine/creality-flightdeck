@@ -172,7 +172,7 @@ The [`server/`](server/) folder is a small, self-hosted alert relay:
 
 Setup: upload `server/` to e.g. `public_html/k1-alertes/`, copy `config.example.php` to `config.php` and set your token and e-mail, open the page on your phone and tap *Activer les notifications*. Then enter the URL and token in the dashboard. Full steps are in [`server/INSTALLATION.txt`](server/INSTALLATION.txt).
 
-Requirements: PHP 7.4+ with `openssl` and `curl`, and HTTPS.
+Requirements: PHP 7.4+ with `openssl` and `curl`, and HTTPS. The `data/` folder is protected by `.htaccess` (Apache/LiteSpeed). On nginx, set `data_dir` in `config.php` to a folder outside the web root. Only browser push services (Google, Mozilla, Microsoft, Apple) are accepted as subscription endpoints.
 
 > Web Push notifications can't play sound on vibrate on Android. For loud alarms, use ntfy (you can use both).
 

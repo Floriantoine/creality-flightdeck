@@ -29,4 +29,8 @@ return [
 
     // Limite anti-abus : nombre maximum d'alertes par heure.
     'max_per_hour' => 30,
+
+    // (Optionnel) Dossier des clés et abonnements, idéalement HORS de public_html.
+    // Obligatoire si ton serveur est nginx (les .htaccess y sont ignorés).
+    // 'data_dir' => '/home/TON_COMPTE/k1-alertes-data',
 ];

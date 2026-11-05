@@ -1,7 +1,9 @@
 <?php
 // K1 Alertes — fonctions communes (pas besoin de modifier ce fichier)
 
-const DATA = __DIR__ . '/data';
+// Dossier des clés et abonnements. Par défaut data/ (protégé par .htaccess sur Apache/LiteSpeed).
+// Sur nginx, ou par prudence, mets 'data_dir' dans config.php vers un dossier HORS de public_html.
+define('DATA', (function () { $c = require __DIR__ . '/config.php'; return rtrim($c['data_dir'] ?? (__DIR__ . '/data'), '/'); })());
 
 function cfg() {
     static $c = null;
@@ -99,6 +101,8 @@ function push_one($sub, $vapid, $urgent) {
         CURLOPT_POSTFIELDS => '',
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT => 10,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
         CURLOPT_HTTPHEADER => [
             'TTL: 86400',
             'Urgency: ' . ($urgent ? 'high' : 'normal'),

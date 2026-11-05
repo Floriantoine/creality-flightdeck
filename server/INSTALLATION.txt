@@ -9,6 +9,8 @@ Le tableau de bord de ta K1 Max envoie ses alertes à TON serveur, qui les relai
   • SMS (par la passerelle courriel → SMS de ton opérateur)
 
 Il faut : PHP 7.4 ou plus récent (avec openssl et curl, présents sur presque tous les cPanel) et HTTPS (AutoSSL).
+Sécurité : le dossier data/ est protégé par un .htaccess (Apache/LiteSpeed, le cas de cPanel).
+Sur nginx, ou par prudence, règle 'data_dir' dans config.php vers un dossier hors de public_html.
 
 
 1) Téléverser les fichiers
