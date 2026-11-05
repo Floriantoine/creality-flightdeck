@@ -1071,7 +1071,7 @@ function connect(){
     if (e.data === "ok") return;
     if (typeof e.data === "string" && e.data.includes("heart_beat")){ try { ws.send("ok"); } catch(_){} return; }
     let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (m && typeof m === "object" && !Array.isArray(m)) update(m);
+    if (m && typeof m === "object" && !Array.isArray(m)) update(holdPending(m));
   };
   ws.onclose = () => {
     clearTimeout(openTimer); clearInterval(hb);
@@ -2349,10 +2349,40 @@ function ask(title, detail, danger){
   });
 }
 function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString(LOC)}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
+/* Valeurs « en attente » : après un réglage, l'imprimante renvoie encore l'ancienne valeur
+   pendant quelques secondes. On garde la nouvelle affichée jusqu'à confirmation (max 10 s). */
+const pending = {};
+function expectFrom(params){
+  const e = {};
+  if ("nozzleTempControl" in params) e.targetNozzleTemp = +params.nozzleTempControl;
+  if (params.bedTempControl && "val" in params.bedTempControl) e["targetBedTemp" + (params.bedTempControl.num || 0)] = +params.bedTempControl.val;
+  if ("setFeedratePct" in params) e.curFeedratePct = +params.setFeedratePct;
+  if ("lightSw" in params) e.lightSw = +params.lightSw;
+  const f = typeof params.gcodeCmd === "string" && /^M106\s+P([012])\s+S(\d+)/i.exec(params.gcodeCmd);
+  if (f) e[["modelFanPct", "caseFanPct", "auxiliaryFanPct"][+f[1]]] = Math.round(+f[2] / 255 * 100);
+  return e;
+}
+function holdPending(m){
+  const now = Date.now();
+  for (const k of Object.keys(pending)){
+    const p = pending[k];
+    if (now > p.until){ delete pending[k]; continue; }
+    if (!(k in m)) continue;
+    const v = num(m[k]);
+    if (v !== null && Math.abs(v - p.val) <= (p.tol || 0)) delete pending[k];   // confirmé
+    else m[k] = p.val;                                                          // ancienne valeur → ignorée
+  }
+  return m;
+}
 async function act(label, params, o = {}){
   if (!ws || ws.readyState !== 1){ toast("Pas connecté à l'imprimante"); return false; }
   if (o.confirm && !(await ask(label + " ?", o.detail, o.danger))) { cLog(`${label} — annulé`); return false; }
   ws.send(JSON.stringify({method:"set", params}));
+  const exp = expectFrom(params);
+  if (Object.keys(exp).length){
+    for (const [k, v] of Object.entries(exp)) pending[k] = {val: v, until: Date.now() + 10000, tol: /FanPct$/.test(k) ? 1 : 0};
+    update({...exp});   // affichage immédiat
+  }
   cLog(`${label} → envoyé`); sLog(`Commande : ${label}`);
   return true;
 }
