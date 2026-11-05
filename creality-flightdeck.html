@@ -772,6 +772,7 @@ const I18N_DICT = {
   "En direct":"Live", "Vitesse":"Speed", "Débit":"Flow", "Hauteur Z":"Z height", "Filament":"Filament",
   "Ventilateurs":"Fans", "Pièce":"Part", "Boîtier":"Case", "Auxiliaire":"Auxiliary", "Vitesse demandée":"Requested speed",
   "Aucun maillage":"No mesh", "Caméra non disponible":"Camera unavailable", "(caméra non disponible)":"(camera unavailable)",
+  "L'imprimante n'a pas répondu à la demande de liste (reqGcodeFile ni reqGcodeList).":"The printer did not answer the list request (neither reqGcodeFile nor reqGcodeList).",
   "vide":"empty", "CFS":"CFS",
   // Plate
   "Pièces":"Objects", "Plateau entier":"Whole bed", "Trajet buse":"Nozzle path", "Aucune pièce reçue":"No objects received",
@@ -918,6 +919,7 @@ const I18N_RULES = [
   [/^Non confirmé par l'imprimante : (.+) \(valeur actuelle : (.+)\)$/, (_, a, v) => `Not confirmed by the printer: ${tr(a)} (current value: ${v})`],
   [/^(.*) · reste estimé (\d+) % \(RFID\)$/, (_, a, v) => `${tr(a)} · estimated remaining ${v} % (RFID)`],
   [/^(.*) · reste inconnu \(pas de puce RFID\)$/, (_, a) => `${tr(a)} · remaining unknown (no RFID tag)`],
+  [/^Réponse reçue \((.+?)\) mais aucun fichier reconnu : (.*)$/s, "Reply received ($1) but no file recognised: $2"],
   [/^Refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "Refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^✗ refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "✗ refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^Ventilateur (pièce|boîtier|auxiliaire) à (\d+) %$/, (m, a, b) => `${w(a)[0].toUpperCase() + w(a).slice(1)} fan at ${b} %`],
@@ -1069,7 +1071,7 @@ function connect(){
     setConn("on", "Connecté");
     hb = setInterval(() => ws.readyState===1 && ws.send(JSON.stringify({ModeCode:"heart_beat", msg:new Date().toISOString()})), 10000);
     startCam(ip);
-    thumbFor = null; setTimeout(() => { meshFetch(); refreshThumb(); cfsAsk(); if (curView === "files") wsGet("reqGcodeFile"); if (curView === "history") wsGet("reqHistory"); }, 800);   // maillage + aperçu + CFS à chaque connexion
+    thumbFor = null; setTimeout(() => { meshFetch(); refreshThumb(); cfsAsk(); if (curView === "files") askFiles(); if (curView === "history") wsGet("reqHistory"); }, 800);   // maillage + aperçu + CFS à chaque connexion
   };
   ws.onmessage = e => {
     if (e.data === "ok") return;
@@ -1150,6 +1152,8 @@ function startCam(ip){
 }
 
 /* ================= Données ================= */
+var fileKeyAt = {};
+const FILE_KEY = /^retGcodeFileInfo|gcodeFileList|^fileList$|^gcodeList$|reqGcodeList|retGcodeList/i;
 function update(m){
   const now = Date.now();
   const todo = [];
@@ -1158,6 +1162,7 @@ function update(m){
     if (typeof v === "string" && /^\s*[\[{]/.test(v)) { try { v = JSON.parse(v); } catch(e){} }
     const changed = JSON.stringify(data[k]) !== JSON.stringify(v);
     data[k] = v;
+    if (FILE_KEY.test(k)) fileKeyAt[k] = now;
     todo.push([k, changed && k in rows]);
   }
   // Toutes les valeurs d'abord, l'affichage ensuite (certains champs dépendent d'autres)
@@ -2490,20 +2495,40 @@ function askInput(title, value){
 /* ---- 1. Fichiers ---- */
 let FILES = [];
 function parseFiles(v){
-  // fileInfo = "chemin:nom:taille:couches:date:longueur_mm:miniature;…"
-  const txt = isObj(v) ? (v.fileInfo ?? "") : String(v || "");
-  return txt.split(";").filter(Boolean).map(line => {
+  // Format habituel : {fileInfo: "chemin:nom:taille:couches:date:longueur_mm:miniature;…"}
+  // On accepte aussi une liste d'objets ou du texte avec moins de champs (selon le firmware).
+  if (Array.isArray(v)) return v.map(o => isObj(o) ? fileFromObj(o) : parseFiles(String(o))[0]).filter(Boolean).sort((a, b) => b.time - a.time);
+  if (isObj(v) && !("fileInfo" in v)){ const arr = Object.values(v).find(Array.isArray); if (arr) return parseFiles(arr); }
+  const txt = isObj(v) ? String(v.fileInfo ?? "") : String(v || "");
+  return txt.split(";").map(x => x.trim()).filter(Boolean).map(line => {
     const e = line.split(":");
-    if (e.length < 7) return null;
+    if (e.length === 1) { const i = line.lastIndexOf("/"); return /\.gcode$/i.test(line) ? {path: i > 0 ? line.slice(0, i) : "", name: line.slice(i + 1), size: 0, layer: 0, time: 0, len: 0, thumb: ""} : null; }
     const thumb = e.slice(6).join(":"), tn = thumb.substring(thumb.lastIndexOf("/") + 1);
-    return {path: e[0], name: e[1], size: +e[2], layer: +e[3], time: +e[4], len: +e[5] / 1000, thumb: tn};
-  }).filter(Boolean).sort((a, b) => b.time - a.time);
+    return {path: e[0], name: e[1] || "", size: +e[2] || 0, layer: +e[3] || 0, time: +e[4] || 0, len: (+e[5] || 0) / 1000, thumb: tn || (e[1] || "").replace(/\.gcode$/i, ".png")};
+  }).filter(f => f && f.name).sort((a, b) => b.time - a.time);
 }
+function fileFromObj(o){
+  const full = String(o.path ?? o.filename ?? o.fileName ?? o.name ?? ""), i = full.lastIndexOf("/");
+  const name = String(o.name ?? o.fileName ?? full.slice(i + 1)), path = String(o.dir ?? (i > 0 ? full.slice(0, i) : "/usr/data/printer_data/gcodes"));
+  const th = String(o.thumbnail ?? o.thumb ?? ""), tn = th.substring(th.lastIndexOf("/") + 1);
+  return name ? {path, name, size: num(o.size) || 0, layer: num(o.layer ?? o.layers ?? o.floorNum) || 0, time: num(o.modifyTime ?? o.time ?? o.mtime ?? o.date) || 0, len: (num(o.consumables ?? o.length) || 0) / 1000, thumb: tn || name.replace(/\.gcode$/i, ".png")} : null;
+}
+// Diagnostic : ce que l'imprimante a répondu (ou pas) à la demande de liste
+let filesAskedAt = 0, filesSeenKeys = [];
+function askFiles(){ filesAskedAt = Date.now(); wsGet("reqGcodeFile"); setTimeout(() => { if (!FILES.length) { wsGet("reqGcodeList"); setTimeout(() => curView === "files" && renderFiles(), 2500); } }, 2500); }
 function renderFiles(){
   const q = $("fSearch").value.trim().toLowerCase();
   const list = FILES.filter(f => !q || f.name.toLowerCase().includes(q));
   const printing = num(data.state) === 1;
-  if (!FILES.length){ $("fList").innerHTML = `<div class="empty">Aucun fichier reçu. Clique « Rafraîchir ».</div>`; return; }
+  if (!FILES.length){
+    const fk = Object.keys(data).filter(k => FILE_KEY.test(k));
+    const waited = filesAskedAt && Date.now() - filesAskedAt > 4500;
+    const diag = fk.length
+      ? `Réponse reçue (${fk.join(", ")}) mais aucun fichier reconnu : ${esc(JSON.stringify(data[fk[0]]).slice(0, 300))}`
+      : waited ? "L'imprimante n'a pas répondu à la demande de liste (reqGcodeFile ni reqGcodeList)." : "";
+    $("fList").innerHTML = `<div class="empty">Aucun fichier reçu. Clique « Rafraîchir ».${diag ? `<br><small class="mono">${diag}</small>` : ""}</div>`;
+    return;
+  }
   $("fList").innerHTML = `<div class="frow fhead"><span></span><span>Nom</span><span>Taille</span><span>Couches</span><span>Filament</span><span>Date</span><span></span></div>` +
     list.map((f, i) => `<div class="frow" data-i="${FILES.indexOf(f)}">
       <img loading="lazy" alt="" src="${esc(ipBase())}/downloads/humbnail/${encodeURIComponent(f.thumb)}" data-fb="${esc(ipBase())}/downloads/defData/${encodeURIComponent(f.thumb)}" onerror="this.onerror=null;this.src=this.dataset.fb">
@@ -2519,15 +2544,15 @@ $("fList").addEventListener("click", async e => {
   if (b.dataset.fa === "print")
     await act(`Lancer l'impression de « ${f.name} »`, {opGcodeFile: "printprt:" + full}, {confirm:true, detail:"Vérifie que le plateau est vide et propre."});
   else if (b.dataset.fa === "del"){
-    if (await act(`Supprimer « ${f.name} »`, {opGcodeFile: "deleteprt:" + full}, {confirm:true, danger:true, detail:"Le fichier sera effacé de l'imprimante."})) setTimeout(() => wsGet("reqGcodeFile"), 1500);
+    if (await act(`Supprimer « ${f.name} »`, {opGcodeFile: "deleteprt:" + full}, {confirm:true, danger:true, detail:"Le fichier sera effacé de l'imprimante."})) setTimeout(askFiles, 1500);
   } else if (b.dataset.fa === "ren"){
     let n = await askInput("Nouveau nom", f.name); if (!n || n === f.name) return;
     if (!/\.gcode$/i.test(n)) n += ".gcode";
     if (/[\/:;]/.test(n)) return toast("Le nom ne peut pas contenir / : ;");
-    if (await act(`Renommer en « ${n} »`, {opGcodeFile: `renameprt:${full}:${f.path}/${n}`})) setTimeout(() => wsGet("reqGcodeFile"), 1500);
+    if (await act(`Renommer en « ${n} »`, {opGcodeFile: `renameprt:${full}:${f.path}/${n}`})) setTimeout(askFiles, 1500);
   }
 });
-$("fRefresh").onclick = () => { $("fList").innerHTML = `<div class="empty">Chargement…</div>`; wsGet("reqGcodeFile"); };
+$("fRefresh").onclick = () => { $("fList").innerHTML = `<div class="empty">Chargement…</div>`; askFiles(); };
 $("fSearch").addEventListener("input", renderFiles);
 
 // Envoi d'un G-code (POST /upload/<nom>, champ « file » seulement, comme l'interface officielle)
@@ -2639,7 +2664,7 @@ $("mtMesh").onclick    = () => act("Effacer le bed mesh enregistré", {rmProbedM
 
 // Rafraîchit ces vues avec les données reçues
 function renderExtras(){
-  const fk = Object.keys(data).find(k => /^retGcodeFileInfo/.test(k));
+  const fk = Object.keys(data).filter(k => FILE_KEY.test(k)).sort((a, b) => (fileKeyAt[b] || 0) - (fileKeyAt[a] || 0))[0];
   if (fk){ const nf = parseFiles(data[fk]); if (JSON.stringify(nf) !== JSON.stringify(FILES)){ FILES = nf; if (curView === "files") renderFiles(); } }
   if (curView === "history") renderHistory();
   const m = /X:\s*(-?[\d.]+)\s*Y:\s*(-?[\d.]+)\s*Z:\s*(-?[\d.]+)/i.exec(String(data.curPosition || ""));
@@ -2673,7 +2698,7 @@ function showView(v){
   try { localStorage.setItem("k1view", v); } catch(e){}
   if (location.hash !== "#" + v) history.replaceState(null, "", "#" + v);
   requestAnimationFrame(() => { plateFit(); drawChart(); meshDraw(); });
-  if (v === "files"){ renderFiles(); wsGet("reqGcodeFile"); }
+  if (v === "files"){ renderFiles(); askFiles(); }
   if (v === "history"){ renderHistory(); wsGet("reqHistory"); }
   if (v === "control"){ wsGet("boxConfig"); }
   window.scrollTo(0, 0);
