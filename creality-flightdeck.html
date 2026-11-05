@@ -2358,7 +2358,7 @@ function ask(title, detail, danger){
 }
 function cLog(t){ const d = document.createElement("div"); d.textContent = `${new Date().toLocaleTimeString(LOC)}  ${t}`; $("cLog").prepend(d); while ($("cLog").children.length > 30) $("cLog").lastChild.remove(); }
 /* Valeurs « en attente » : après un réglage, l'imprimante renvoie encore l'ancienne valeur
-   pendant quelques secondes. On garde la nouvelle affichée jusqu'à confirmation (max 6 s). */
+   pendant quelques secondes. On garde la nouvelle affichée jusqu'à confirmation (max 4 s). */
 const pending = {};
 function expectFrom(params){
   const e = {};
@@ -2393,7 +2393,7 @@ async function act(label, params, o = {}){
   ws.send(JSON.stringify({method:"set", params}));
   const exp = expectFrom(params);
   if (Object.keys(exp).length){
-    for (const [k, v] of Object.entries(exp)) pending[k] = {val: v, until: Date.now() + 6000, tol: /FanPct$/.test(k) ? 1 : 0, label};
+    for (const [k, v] of Object.entries(exp)) pending[k] = {val: v, until: Date.now() + 4000, tol: /FanPct$/.test(k) ? 1 : 0, label};
     update({...exp});   // affichage immédiat
   }
   cLog(`${label} → envoyé`); sLog(`Commande : ${label}`);
