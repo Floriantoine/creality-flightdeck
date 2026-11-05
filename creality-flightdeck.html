@@ -916,6 +916,8 @@ const I18N_RULES = [
   [/^Commande : (.+)$/, (m, a) => `Command: ${tr(a)}`], [/^G-code : (.+)$/, "G-code: $1"],
   [/^Régler la buse à (.+) °C$/, "Set the nozzle to $1 °C"], [/^Régler le plateau à (.+) °C$/, "Set the bed to $1 °C"],
   [/^Non confirmé par l'imprimante : (.+) \(valeur actuelle : (.+)\)$/, (_, a, v) => `Not confirmed by the printer: ${tr(a)} (current value: ${v})`],
+  [/^(.*) · reste estimé (\d+) % \(RFID\)$/, (_, a, v) => `${tr(a)} · estimated remaining ${v} % (RFID)`],
+  [/^(.*) · reste inconnu \(pas de puce RFID\)$/, (_, a) => `${tr(a)} · remaining unknown (no RFID tag)`],
   [/^Refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "Refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^✗ refusé : (.+) °C ≥ limite de sécurité \((.+) °C\)$/, "✗ refused: $1 °C ≥ safety limit ($2 °C)"],
   [/^Ventilateur (pièce|boîtier|auxiliaire) à (\d+) %$/, (m, a, b) => `${w(a)[0].toUpperCase() + w(a).slice(1)} fan at ${b} %`],
@@ -2704,11 +2706,15 @@ function renderCfs(){
   $("cfsTile").style.gridTemplateColumns = `repeat(${Math.min(Math.max(mats.length, 4), 8)}, minmax(0, 1fr))`;
   $("cfsTile").innerHTML = mats.map((m, i) => {
     const o = m.o, t = o.type ?? o.materialType ?? "", name = o.name ?? "", vend = o.vendor ?? "";
-    const pk = Object.keys(o).find(k => /percent|remain/i.test(k)), pct = pk ? num(o[pk]) : null;
+    const pk = Object.keys(o).find(k => /percent|remain/i.test(k));
+    // Le CFS ne pèse pas les bobines : le % est estimé à partir de la puce RFID (bobines Creality)
+    // moins le filament consommé. Sans puce, il reste bloqué à 100 % → on affiche « ? ».
+    const hasRfid = o.rfid !== undefined && !/^[0\s]*$/.test(String(o.rfid ?? ""));
+    const pct = pk && hasRfid ? num(o[pk]) : null, pctTxt = pct !== null ? `≈ ${pct} %` : (pk ? "? %" : "");
     const empty = !t && !name, sel = num(o.selected) === 1;
-    const extra = [o.minTemp && o.maxTemp ? `${o.minTemp}–${o.maxTemp} °C` : "", o.pressure ? `PA ${o.pressure}` : "", o.rfid ? `RFID ${o.rfid}` : ""].filter(Boolean).join(" · ");
-    return `<div class="cs${sel ? " sel" : ""}" title="${esc([m.slot, vend, name, t, extra].filter(Boolean).join(" · ") || "vide")}${pct !== null ? " · " + pct + " %" : ""}">
-      ${m.slot ? `<span class="slotn">${m.slot}</span>` : ""}<i style="background:${empty ? "transparent" : m.c};${empty ? "border-style:dashed" : ""}"></i><span>${esc(t || (empty ? "vide" : name))}</span>${pct !== null && !empty ? `<span class="meta">${pct} %</span>` : ""}</div>`;
+    const extra = [o.minTemp && o.maxTemp ? `${o.minTemp}–${o.maxTemp} °C` : "", o.pressure ? `PA ${o.pressure}` : "", hasRfid ? `RFID ${o.rfid}` : ""].filter(Boolean).join(" · ");
+    return `<div class="cs${sel ? " sel" : ""}" title="${esc([m.slot, vend, name, t, extra].filter(Boolean).join(" · ") || "vide")}${pct !== null ? " · reste estimé " + pct + " % (RFID)" : pk ? " · reste inconnu (pas de puce RFID)" : ""}">
+      ${m.slot ? `<span class="slotn">${m.slot}</span>` : ""}<i style="background:${empty ? "transparent" : m.c};${empty ? "border-style:dashed" : ""}"></i><span>${esc(t || (empty ? "vide" : name))}</span>${pctTxt && !empty ? `<span class="meta">${pctTxt}</span>` : ""}</div>`;
   }).join("");
   const cfsBox = (bi.materialBoxs || []).find(b => num(b.type) === 0);
   const cfg = isObj(data.boxConfig) ? data.boxConfig : null;
